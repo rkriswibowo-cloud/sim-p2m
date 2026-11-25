@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"unicode/utf8"
 
@@ -23,8 +24,12 @@ func (s service) listReports(c *gin.Context, a actor) {
  JSON_OBJECT('introduction',COALESCE(JSON_UNQUOTE(JSON_EXTRACT(p.payload,'$.introduction')),''),
  'literature',COALESCE(JSON_UNQUOTE(JSON_EXTRACT(p.payload,'$.literature')),''),
  'method',COALESCE(JSON_UNQUOTE(JSON_EXTRACT(p.payload,'$.method')),''),
- 'references',COALESCE(JSON_UNQUOTE(JSON_EXTRACT(p.payload,'$.references')),''))
- FROM research_proposals p LEFT JOIN research_reports r ON r.institution_id=p.institution_id AND r.proposal_id=p.id AND r.is_active
+ 'references',COALESCE(JSON_UNQUOTE(JSON_EXTRACT(p.payload,'$.references')),'')),
+ g.allow_progress_report, g.allow_final_report
+ FROM research_proposals p
+ JOIN grant_scheme_versions v ON v.institution_id=p.institution_id AND v.id=p.grant_version_id
+ JOIN grant_periods g ON g.institution_id=v.institution_id AND g.id=v.period_id
+ LEFT JOIN research_reports r ON r.institution_id=p.institution_id AND r.proposal_id=p.id AND r.is_active
  WHERE p.institution_id=? AND p.owner_user_id=? AND p.status='submitted' ORDER BY p.submitted_at DESC,p.id DESC,r.kind`, a.tenant, a.ID)
 	if err != nil {
 		c.Status(503)
@@ -32,18 +37,20 @@ func (s service) listReports(c *gin.Context, a actor) {
 	}
 	defer rows.Close()
 	type reportRow struct {
-		ProposalID int64           `json:"proposalId"`
-		Title      string          `json:"title"`
-		Kind       string          `json:"kind"`
-		Revision   int             `json:"revision"`
-		Data       json.RawMessage `json:"data"`
-		Source     json.RawMessage `json:"source"`
+		ProposalID          int64           `json:"proposalId"`
+		Title               string          `json:"title"`
+		Kind                string          `json:"kind"`
+		Revision            int             `json:"revision"`
+		Data                json.RawMessage `json:"data"`
+		Source              json.RawMessage `json:"source"`
+		AllowProgressReport bool            `json:"allowProgressReport"`
+		AllowFinalReport    bool            `json:"allowFinalReport"`
 	}
 	items := []reportRow{}
 	for rows.Next() {
 		var item reportRow
 		var data, source []byte
-		if err := rows.Scan(&item.ProposalID, &item.Title, &item.Kind, &item.Revision, &data, &source); err != nil {
+		if err := rows.Scan(&item.ProposalID, &item.Title, &item.Kind, &item.Revision, &data, &source, &item.AllowProgressReport, &item.AllowFinalReport); err != nil {
 			c.Status(503)
 			return
 		}
@@ -89,10 +96,20 @@ func (s service) changeReport(c *gin.Context, a actor) {
 	}
 	s.change(c, a, action, func(ctx context.Context, tx *sql.Tx) (int64, error) {
 		var parent int64
-		err := tx.QueryRowContext(ctx, `SELECT id FROM research_proposals
- WHERE institution_id=? AND owner_user_id=? AND id=? AND status='submitted' FOR UPDATE`, a.tenant, a.ID, proposalID).Scan(&parent)
+		var allowProgress, allowFinal bool
+		err := tx.QueryRowContext(ctx, `SELECT p.id, g.allow_progress_report, g.allow_final_report
+ FROM research_proposals p
+ JOIN grant_scheme_versions v ON v.institution_id=p.institution_id AND v.id=p.grant_version_id
+ JOIN grant_periods g ON g.institution_id=v.institution_id AND g.id=v.period_id
+ WHERE p.institution_id=? AND p.owner_user_id=? AND p.id=? AND p.status='submitted' FOR UPDATE`, a.tenant, a.ID, proposalID).Scan(&parent, &allowProgress, &allowFinal)
 		if err != nil {
 			return 0, err
+		}
+		if kind == "progress" && !allowProgress {
+			return 0, fmt.Errorf("%w: laporan kemajuan belum diaktifkan oleh Admin LPPM/Superadmin untuk periode ini", invalidProposal)
+		}
+		if kind == "final" && !allowFinal {
+			return 0, fmt.Errorf("%w: laporan akhir belum diaktifkan oleh Admin LPPM/Superadmin untuk periode ini", invalidProposal)
 		}
 		var id int64
 		var revision int

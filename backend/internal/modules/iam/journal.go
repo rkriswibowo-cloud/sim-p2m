@@ -3,6 +3,7 @@ package iam
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -69,9 +70,16 @@ func (s service) changeJournal(c *gin.Context, a actor) {
 	}
 	s.change(c, a, action, func(ctx context.Context, tx *sql.Tx) (int64, error) {
 		var parent int64
-		if err := tx.QueryRowContext(ctx, `SELECT id FROM research_proposals
- WHERE id=? AND institution_id=? AND owner_user_id=? AND status='submitted' FOR UPDATE`, proposalID, a.tenant, a.ID).Scan(&parent); err != nil {
+		var allowJournal bool
+		if err := tx.QueryRowContext(ctx, `SELECT p.id, g.allow_daily_journal
+ FROM research_proposals p
+ JOIN grant_scheme_versions v ON v.institution_id=p.institution_id AND v.id=p.grant_version_id
+ JOIN grant_periods g ON g.institution_id=v.institution_id AND g.id=v.period_id
+ WHERE p.id=? AND p.institution_id=? AND p.owner_user_id=? AND p.status='submitted' FOR UPDATE`, proposalID, a.tenant, a.ID).Scan(&parent, &allowJournal); err != nil {
 			return 0, err
+		}
+		if !allowJournal {
+			return 0, fmt.Errorf("%w: catatan harian belum diaktifkan oleh Admin LPPM/Superadmin untuk periode ini", invalidProposal)
 		}
 		if create {
 			result, err := tx.ExecContext(ctx, "INSERT INTO research_journal (proposal_id,activity_date,activity,result,obstacle) VALUES (?,?,?,?,?)",

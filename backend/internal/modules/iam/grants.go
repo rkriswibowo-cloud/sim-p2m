@@ -30,9 +30,12 @@ type grantPeriod struct {
 	ReviewStart        string    `json:"reviewStart"`
 	ReviewEnd          string    `json:"reviewEnd"`
 	ExecutionStart     string    `json:"executionStart"`
-	ProgressReportDate string    `json:"progressReportDate"`
-	FinalReportDate    string    `json:"finalReportDate"`
-	State              string    `json:"state"`
+	ProgressReportDate  string    `json:"progressReportDate"`
+	FinalReportDate     string    `json:"finalReportDate"`
+	AllowDailyJournal   bool      `json:"allowDailyJournal"`
+	AllowProgressReport bool      `json:"allowProgressReport"`
+	AllowFinalReport    bool      `json:"allowFinalReport"`
+	State               string    `json:"state"`
 }
 
 type grantVersion struct {
@@ -119,6 +122,7 @@ func (s service) grantTimeline(c *gin.Context, a actor) {
   COALESCE(DATE_FORMAT(execution_start,'%Y-%m-%d'),''),
   COALESCE(DATE_FORMAT(progress_report_date,'%Y-%m-%d'),''),
   COALESCE(DATE_FORMAT(final_report_date,'%Y-%m-%d'),''),
+  allow_daily_journal, allow_progress_report, allow_final_report,
   CASE WHEN UTC_TIMESTAMP()<opens_at THEN 'scheduled' WHEN UTC_TIMESTAMP()>=closes_at THEN 'closed' ELSE 'open' END
   FROM grant_periods WHERE institution_id=?
   ORDER BY (UTC_TIMESTAMP() BETWEEN opens_at AND closes_at) DESC, opens_at DESC, id DESC LIMIT 5`, a.tenant)
@@ -131,7 +135,8 @@ func (s service) grantTimeline(c *gin.Context, a actor) {
 	for rows.Next() {
 		var row grantPeriod
 		if err := rows.Scan(&row.ID, &row.Code, &row.Name, &row.ProposalYear, &row.ProjectYear, &row.BudgetYear, &row.OpensAt, &row.ClosesAt,
-			&row.ReviewStart, &row.ReviewEnd, &row.ExecutionStart, &row.ProgressReportDate, &row.FinalReportDate, &row.State); err != nil {
+			&row.ReviewStart, &row.ReviewEnd, &row.ExecutionStart, &row.ProgressReportDate, &row.FinalReportDate,
+			&row.AllowDailyJournal, &row.AllowProgressReport, &row.AllowFinalReport, &row.State); err != nil {
 			c.Status(503)
 			return
 		}
@@ -151,6 +156,7 @@ func (s service) grantPeriods(ctx context.Context, tenant int64, all bool) ([]gr
   COALESCE(DATE_FORMAT(execution_start,'%Y-%m-%d'),''),
   COALESCE(DATE_FORMAT(progress_report_date,'%Y-%m-%d'),''),
   COALESCE(DATE_FORMAT(final_report_date,'%Y-%m-%d'),''),
+  allow_daily_journal, allow_progress_report, allow_final_report,
   CASE WHEN UTC_TIMESTAMP()<opens_at THEN 'scheduled' WHEN UTC_TIMESTAMP()>=closes_at THEN 'closed' ELSE 'open' END
   FROM grant_periods WHERE institution_id=? AND (? OR (opens_at<=UTC_TIMESTAMP() AND closes_at>UTC_TIMESTAMP()
    AND EXISTS (SELECT 1 FROM grant_scheme_versions v WHERE v.institution_id=grant_periods.institution_id AND v.period_id=grant_periods.id)))
@@ -163,7 +169,8 @@ func (s service) grantPeriods(ctx context.Context, tenant int64, all bool) ([]gr
 	for rows.Next() {
 		var row grantPeriod
 		if err := rows.Scan(&row.ID, &row.Code, &row.Name, &row.ProposalYear, &row.ProjectYear, &row.BudgetYear, &row.OpensAt, &row.ClosesAt,
-			&row.ReviewStart, &row.ReviewEnd, &row.ExecutionStart, &row.ProgressReportDate, &row.FinalReportDate, &row.State); err != nil {
+			&row.ReviewStart, &row.ReviewEnd, &row.ExecutionStart, &row.ProgressReportDate, &row.FinalReportDate,
+			&row.AllowDailyJournal, &row.AllowProgressReport, &row.AllowFinalReport, &row.State); err != nil {
 			return nil, err
 		}
 		items = append(items, row)
@@ -212,6 +219,9 @@ func (s service) saveGrantPeriod(c *gin.Context, a actor) {
 		ReviewStart, ReviewEnd                string
 		ExecutionStart                        string
 		ProgressReportDate, FinalReportDate   string
+		AllowDailyJournal                     bool
+		AllowProgressReport                   bool
+		AllowFinalReport                      bool
 	}
 	if c.ShouldBindJSON(&input) != nil {
 		c.Status(400)
@@ -248,21 +258,48 @@ func (s service) saveGrantPeriod(c *gin.Context, a actor) {
 				return 0, err
 			}
 			_, err := tx.ExecContext(ctx, `UPDATE grant_periods SET code=?,name=?,proposal_year=?,project_year=?,budget_year=?,opens_at=?,closes_at=?,
-   review_start=?,review_end=?,execution_start=?,progress_report_date=?,final_report_date=?
+   review_start=?,review_end=?,execution_start=?,progress_report_date=?,final_report_date=?,
+   allow_daily_journal=?,allow_progress_report=?,allow_final_report=?
    WHERE institution_id=? AND id=?`,
 				input.Code, input.Name, input.ProposalYear, input.ProjectYear, input.BudgetYear, input.OpensAt.UTC(), input.ClosesAt.UTC(),
-				revStart, revEnd, execStart, progDate, finalDate, a.tenant, id)
+				revStart, revEnd, execStart, progDate, finalDate,
+				input.AllowDailyJournal, input.AllowProgressReport, input.AllowFinalReport, a.tenant, id)
 			return id, err
 		}
 		result, err := tx.ExecContext(ctx, `INSERT INTO grant_periods
-   (institution_id,code,name,proposal_year,project_year,budget_year,opens_at,closes_at,review_start,review_end,execution_start,progress_report_date,final_report_date)
-   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+   (institution_id,code,name,proposal_year,project_year,budget_year,opens_at,closes_at,review_start,review_end,execution_start,progress_report_date,final_report_date,allow_daily_journal,allow_progress_report,allow_final_report)
+   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			a.tenant, input.Code, input.Name, input.ProposalYear, input.ProjectYear, input.BudgetYear, input.OpensAt.UTC(), input.ClosesAt.UTC(),
-			revStart, revEnd, execStart, progDate, finalDate)
+			revStart, revEnd, execStart, progDate, finalDate, input.AllowDailyJournal, input.AllowProgressReport, input.AllowFinalReport)
 		if err != nil {
 			return 0, err
 		}
 		return result.LastInsertId()
+	})
+}
+
+func (s service) togglePeriodReporting(c *gin.Context, a actor) {
+	id, err := strconv.ParseInt(c.Param("period"), 10, 64)
+	var input struct {
+		AllowDailyJournal   bool `json:"allowDailyJournal"`
+		AllowProgressReport bool `json:"allowProgressReport"`
+		AllowFinalReport    bool `json:"allowFinalReport"`
+	}
+	if err != nil || id < 1 || c.ShouldBindJSON(&input) != nil {
+		c.Status(400)
+		return
+	}
+	s.change(c, a, "grants.period.reporting", func(ctx context.Context, tx *sql.Tx) (int64, error) {
+		var locked int64
+		if err := tx.QueryRowContext(ctx, "SELECT id FROM grant_periods WHERE institution_id=? AND id=? FOR UPDATE", a.tenant, id).Scan(&locked); err != nil {
+			return 0, err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE grant_periods
+ SET allow_daily_journal=?, allow_progress_report=?, allow_final_report=?
+ WHERE institution_id=? AND id=?`, input.AllowDailyJournal, input.AllowProgressReport, input.AllowFinalReport, a.tenant, id); err != nil {
+			return 0, err
+		}
+		return id, nil
 	})
 }
 

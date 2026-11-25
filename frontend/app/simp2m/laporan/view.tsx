@@ -22,7 +22,11 @@ const sections = {
 const kinds = ["progress", "final"] as const;
 const labels = { progress: "Laporan kemajuan", final: "Laporan akhir" };
 type Kind = keyof typeof sections;
-type Row = { proposalId: number; title: string; kind: Kind | ""; revision: number; data: Record<string, string>; source: Record<string, string> };
+type Row = {
+  proposalId: number; title: string; kind: Kind | ""; revision: number;
+  data: Record<string, string>; source: Record<string, string>;
+  allowProgressReport?: boolean; allowFinalReport?: boolean;
+};
 type Editor = Pick<Row, "proposalId" | "title" | "revision" | "data"> & { kind: Kind };
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -127,13 +131,17 @@ export function ReportsPanel({ institutions, onlyKind }: { institutions: { id: n
             <div className="grid gap-2 md:grid-cols-2">
               {(onlyKind ? [onlyKind] : kinds).map(kind => {
                 const existing = items?.find(row => row.proposalId === proposal.proposalId && row.kind === kind);
+                const enabled = kind === "progress" ? proposal.allowProgressReport !== false : proposal.allowFinalReport !== false;
                 return <div key={kind} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border p-2">
-                  <span className="text-sm">{labels[kind]}</span>
+                  <div>
+                    <span className="text-sm">{labels[kind]}</span>
+                    {!enabled && <p className="text-xs text-muted-foreground">Belum diaktifkan Admin/Superadmin</p>}
+                  </div>
                   <div className="flex gap-1">
-                    <Button type="button" variant="ghost" size="sm" disabled={pending} onClick={() => open(proposal, kind)} aria-label={`${existing ? "Ubah" : "Buat"} ${labels[kind]}`}>
+                    <Button type="button" variant="ghost" size="sm" disabled={pending || !enabled} onClick={() => open(proposal, kind)} aria-label={`${existing ? "Ubah" : "Buat"} ${labels[kind]}`}>
                       {existing ? <Pencil size={15} /> : <Plus size={15} />} {existing ? "Ubah draf" : "Buat draf"}
                     </Button>
-                    {existing && <Button type="button" variant="ghost" size="icon-sm" disabled={pending} className="text-destructive" aria-label={`Hapus draf ${labels[kind]}`}
+                    {existing && <Button type="button" variant="ghost" size="icon-sm" disabled={pending || !enabled} className="text-destructive" aria-label={`Hapus draf ${labels[kind]}`}
                       onClick={() => void change({ ...existing, kind }, "DELETE")}><Trash2 size={15} /></Button>}
                   </div>
                 </div>;

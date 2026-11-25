@@ -16,6 +16,7 @@ type Period = Choice & {
   code: string; proposalYear: number; projectYear: number; budgetYear: number;
   opensAt: string; closesAt: string;
   reviewStart?: string; reviewEnd?: string; executionStart?: string; progressReportDate?: string; finalReportDate?: string;
+  allowDailyJournal?: boolean; allowProgressReport?: boolean; allowFinalReport?: boolean;
   state: "scheduled" | "open" | "closed";
 };
 type Version = {
@@ -155,6 +156,9 @@ export function GrantPanel() {
         executionStart: String(fields.get("executionStart") ?? ""),
         progressReportDate: String(fields.get("progressReportDate") ?? ""),
         finalReportDate: String(fields.get("finalReportDate") ?? ""),
+        allowDailyJournal: fields.has("allowDailyJournal"),
+        allowProgressReport: fields.has("allowProgressReport"),
+        allowFinalReport: fields.has("allowFinalReport"),
       } : {
         schemeId: Number(fields.get("schemeId")), sourceId: Number(fields.get("sourceId")),
         budget: fields.get("budget"), quota: Number(fields.get("quota")), duration: Number(fields.get("duration")),
@@ -200,6 +204,31 @@ export function GrantPanel() {
       toast.success("Skema hibah dihapus.", workspaceToastOptions);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Skema gagal dihapus.";
+      setError(message);
+      toast.error(message, workspaceToastOptions);
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function toggleReporting(item: Period, key: "allowDailyJournal" | "allowProgressReport" | "allowFinalReport") {
+    setPending(true);
+    setError("");
+    try {
+      const payload = {
+        allowDailyJournal: key === "allowDailyJournal" ? !item.allowDailyJournal : Boolean(item.allowDailyJournal),
+        allowProgressReport: key === "allowProgressReport" ? !item.allowProgressReport : Boolean(item.allowProgressReport),
+        allowFinalReport: key === "allowFinalReport" ? !item.allowFinalReport : Boolean(item.allowFinalReport),
+      };
+      await api(`${endpoint}/periods/${item.id}/reporting`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      setRevision(previousRevision => previousRevision + 1);
+      toast.success("Pengaturan pelaporan periode diperbarui.", workspaceToastOptions);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Gagal memperbarui pengaturan pelaporan.";
       setError(message);
       toast.error(message, workspaceToastOptions);
     } finally {
@@ -274,6 +303,9 @@ export function GrantPanel() {
             <Input label="Mulai pelaksanaan" name="executionStart" type="date" defaultValue={editingPeriod?.executionStart ?? ""} />
             <Input label="Laporan kemajuan 75%" name="progressReportDate" type="date" defaultValue={editingPeriod?.progressReportDate ?? ""} />
             <Input label="Laporan akhir" name="finalReportDate" type="date" defaultValue={editingPeriod?.finalReportDate ?? ""} />
+            <label className="flex items-center gap-2"><input type="checkbox" name="allowDailyJournal" defaultChecked={editingPeriod?.allowDailyJournal} /> Aktifkan Catatan Harian</label>
+            <label className="flex items-center gap-2"><input type="checkbox" name="allowProgressReport" defaultChecked={editingPeriod?.allowProgressReport} /> Aktifkan Laporan Kemajuan</label>
+            <label className="flex items-center gap-2"><input type="checkbox" name="allowFinalReport" defaultChecked={editingPeriod?.allowFinalReport} /> Aktifkan Laporan Akhir</label>
             <div className="workspace-form-actions"><Button type="button" variant="outline" disabled={pending} onClick={() => setCreate(false)}>Batal</Button><Button disabled={pending}>Simpan periode</Button></div>
           </form>
         </CardContent>
@@ -302,6 +334,34 @@ export function GrantPanel() {
             {overview?.canManage && !create && <Button size="sm" variant="outline" disabled={pending} onClick={() => {setRevisionForm(undefined);setEditingPeriod(selected);setCreate(true);}}>Edit periode</Button>}
             {overview?.canManage && selected.state !== "closed" && !revisionForm && <Button size="sm" variant="outline" disabled={pending} onClick={() => {setCreate(false);setRevisionForm({});}}>Tambah skema</Button>}
           </div>
+          {overview?.canManage && (
+            <div className="mt-2 rounded-md border border-border bg-background p-2.5">
+              <p className="mb-2 text-xs font-semibold">Aktivasi Menu Pelaporan Dosen (Admin / Superadmin)</p>
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    ["allowDailyJournal", "Catatan Harian"],
+                    ["allowProgressReport", "Laporan Kemajuan"],
+                    ["allowFinalReport", "Laporan Akhir"],
+                  ] as const
+                ).map(([key, label]) => {
+                  const active = Boolean(selected[key]);
+                  return (
+                    <Button
+                      key={key}
+                      type="button"
+                      size="sm"
+                      variant={active ? "default" : "outline"}
+                      disabled={pending}
+                      onClick={() => void toggleReporting(selected, key)}
+                    >
+                      {label}: {active ? "Aktif" : "Nonaktif"}
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>}
 
