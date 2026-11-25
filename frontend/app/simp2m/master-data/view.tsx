@@ -1,5 +1,7 @@
 "use client";
 
+import { LecturerAccountsPanel } from "./lecturer-accounts";
+
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { Trash2 } from "lucide-react";
@@ -274,6 +276,7 @@ export function MasterDataPanel({ initialKind }: { initialKind?: string }) {
           </div>
         </CardContent>
       </Card>}
+      {kind === "lecturers" && <LecturerAccountsPanel institutionId={institution} />}
     </>
   );
 }

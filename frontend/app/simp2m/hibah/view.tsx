@@ -18,7 +18,16 @@ type Period = Choice & {
 type Version = {
   id: number; periodId: number; schemeId: number; sourceId: number; version: number;
   scheme: string; source: string; budget: string; quota: number; duration: number;
-  activeLecturer: boolean; manual: string; publishedAt: string;
+  activeLecturer: boolean; minJafung?: string; manual: string; publishedAt: string;
+};
+
+const jafungLabels: Record<string, string> = {
+  "": "Semua jabatan fungsional",
+  tenaga_pengajar: "Tenaga Pengajar",
+  asisten_ahli: "Asisten Ahli",
+  lektor: "Lektor",
+  lektor_kepala: "Lektor Kepala",
+  guru_besar: "Guru Besar",
 };
 type Answer = { result: "eligible" | "ineligible" | "manual"; reasons: string[] };
 type Overview = { periods: Period[]; versions: Version[]; canManage: boolean };
@@ -141,7 +150,7 @@ export function GrantPanel() {
       } : {
         schemeId: Number(fields.get("schemeId")), sourceId: Number(fields.get("sourceId")),
         budget: fields.get("budget"), quota: Number(fields.get("quota")), duration: Number(fields.get("duration")),
-        activeLecturer: fields.has("activeLecturer"), manual: fields.get("manual"),
+        activeLecturer: fields.has("activeLecturer"), minJafung: fields.get("minJafung"), manual: fields.get("manual"),
       };
       const path = kind === "period" ? "/periods" + (editingPeriod ? `/${editingPeriod.id}` : "") : `/periods/${period}/versions`;
       const response = await api<{id:number}>(endpoint + path, {
@@ -272,6 +281,11 @@ export function GrantPanel() {
             <Input label="Pagu anggaran skema (rupiah)" name="budget" inputMode="numeric" pattern="[0-9]+" defaultValue={previous?.budget} required maxLength={19} />
             <Input label="Kuota kegiatan" name="quota" type="number" min={1} max={1000000} defaultValue={previous?.quota} required />
             <Input label="Durasi kegiatan (bulan)" name="duration" type="number" min={1} max={120} defaultValue={previous?.duration} required />
+            <div className="min-w-0"><label htmlFor="minJafung" className="mb-1 block">Jabatan fungsional minimal</label>
+              <select id="minJafung" name="minJafung" className="w-full" defaultValue={previous?.minJafung ?? ""}>
+                {Object.entries(jafungLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </div>
             <label className="flex items-center gap-2"><input type="checkbox" name="activeLecturer" defaultChecked={previous?.activeLecturer} /> Pengusul wajib dosen aktif</label>
             <div className="sm:col-span-2 xl:col-span-3"><label htmlFor="manual" className="mb-1 block">Syarat yang diverifikasi admin atau LPPM</label>
               <textarea id="manual" name="manual" rows={3} maxLength={1000} defaultValue={previous?.manual} className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm" />
@@ -295,6 +309,7 @@ export function GrantPanel() {
               <div><dt className="text-muted-foreground">Durasi</dt><dd>{item.duration} bulan</dd></div>
             </dl>
             {item.activeLecturer && <p className="text-xs text-muted-foreground">Wajib berstatus dosen aktif.</p>}
+            {item.minJafung && <p className="text-xs text-muted-foreground">Jabatan fungsional minimal: {jafungLabels[item.minJafung] ?? item.minJafung}.</p>}
             {item.manual && <p className="whitespace-pre-wrap break-words text-xs text-muted-foreground">{item.manual}</p>}
             <div className="flex flex-wrap gap-2">
               {selected.state === "open" && <Button size="sm" variant="outline" disabled={pending} onClick={() => void check(item.id)}>Cek kelayakan saya</Button>}
@@ -307,7 +322,7 @@ export function GrantPanel() {
             {overview?.canManage && versions.some(version => version.schemeId === item.schemeId && version.id !== item.id) && <details className="text-xs text-muted-foreground">
               <summary className="cursor-pointer text-brand">Riwayat versi</summary>
               <ul className="mt-2 space-y-1">{versions.filter(version => version.schemeId === item.schemeId && version.id !== item.id).map(version =>
-                <li key={version.id}>Versi {version.version} · {version.source} · {rupiah.format(BigInt(version.budget))} · kuota {version.quota} · {version.duration} bulan · {localDate.format(new Date(version.publishedAt))} WIB{version.activeLecturer ? " · wajib dosen aktif" : ""}{version.manual ? ` · ${version.manual}` : ""}</li>)}</ul>
+                <li key={version.id}>Versi {version.version} · {version.source} · {rupiah.format(BigInt(version.budget))} · kuota {version.quota} · {version.duration} bulan · {localDate.format(new Date(version.publishedAt))} WIB{version.activeLecturer ? " · wajib dosen aktif" : ""}{version.minJafung ? ` · min. ${jafungLabels[version.minJafung] ?? version.minJafung}` : ""}{version.manual ? ` · ${version.manual}` : ""}</li>)}</ul>
             </details>}
           </CardContent>
         </Card>)}

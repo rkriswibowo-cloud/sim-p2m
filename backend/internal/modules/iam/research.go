@@ -176,6 +176,7 @@ type selectedGrant struct {
 	budget          uint64
 	quota, duration int
 	required        bool
+	minJafung       string
 	manual          string
 	open, current   bool
 }
@@ -187,11 +188,11 @@ func lockGrant(ctx context.Context, tx *sql.Tx, tenant, period, version int64) (
 	if err != nil {
 		return g, err
 	}
-	err = tx.QueryRowContext(ctx, `SELECT v.scheme_id,v.budget_idr,v.quota,v.duration_months,v.active_lecturer,v.manual_requirements,
+	err = tx.QueryRowContext(ctx, `SELECT v.scheme_id,v.budget_idr,v.quota,v.duration_months,v.active_lecturer,v.min_jafung,v.manual_requirements,
  p.opens_at<=UTC_TIMESTAMP() AND p.closes_at>UTC_TIMESTAMP(),
  v.version_no=(SELECT MAX(x.version_no) FROM grant_scheme_versions x WHERE x.institution_id=v.institution_id AND x.period_id=v.period_id AND x.scheme_id=v.scheme_id)
  FROM grant_scheme_versions v JOIN grant_periods p ON p.id=v.period_id AND p.institution_id=v.institution_id
- WHERE v.institution_id=? AND v.id=?`, tenant, version).Scan(&g.scheme, &g.budget, &g.quota, &g.duration, &g.required, &g.manual, &g.open, &g.current)
+ WHERE v.institution_id=? AND v.id=?`, tenant, version).Scan(&g.scheme, &g.budget, &g.quota, &g.duration, &g.required, &g.minJafung, &g.manual, &g.open, &g.current)
 	return g, err
 }
 
@@ -328,9 +329,13 @@ func (s service) submitProposal(c *gin.Context, a actor) {
 		if !grant.open || !grant.current {
 			return 0, unavailableGrant
 		}
-		var matches, active, withCode int
-		if grant.required {
-			if err := tx.QueryRowContext(ctx, "SELECT COUNT(*),COALESCE(SUM(is_active),0),COALESCE(SUM(is_active AND TRIM(code)<>'' AND TRIM(code)<>'-'),0) FROM lecturers WHERE institution_id=? AND email=?", a.tenant, a.Email).Scan(&matches, &active, &withCode); err != nil {
+		var matches, active, withNUPTK int
+		var lecturerJafung string
+		if grant.required || grant.minJafung != "" {
+			if err := tx.QueryRowContext(ctx, `SELECT COUNT(*),COALESCE(SUM(is_active),0),
+ COALESCE(SUM(is_active AND TRIM(nuptk)<>'' AND TRIM(nuptk)<>'-'),0),
+ COALESCE(MAX(CASE WHEN is_active THEN jafung ELSE '' END),'')
+ FROM lecturers WHERE institution_id=? AND (user_id=? OR (user_id IS NULL AND email=?))`, a.tenant, a.ID, a.Email).Scan(&matches, &active, &withNUPTK, &lecturerJafung); err != nil {
 				return 0, err
 			}
 		}
@@ -342,7 +347,7 @@ func (s service) submitProposal(c *gin.Context, a actor) {
 		if err != nil {
 			return 0, err
 		}
-		eligibility, reasons := assessEligibility(grant.open, grant.current, grant.required, grant.manual, matches, active, withCode, overdue)
+		eligibility, reasons := assessEligibility(grant.open, grant.current, grant.required, grant.minJafung, grant.manual, matches, active, withNUPTK, lecturerJafung, overdue)
 		if eligibility == "ineligible" || (eligibility == "manual" && item.Verification != "verified") {
 			return 0, fmt.Errorf("%w: %s", eligibilityBlocked, strings.Join(reasons, " "))
 		}

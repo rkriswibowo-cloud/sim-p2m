@@ -42,6 +42,7 @@ type grantVersion struct {
 	Quota          int       `json:"quota"`
 	Duration       int       `json:"duration"`
 	ActiveLecturer bool      `json:"activeLecturer"`
+	MinJafung      string    `json:"minJafung"`
 	Manual         string    `json:"manual"`
 	PublishedAt    time.Time `json:"publishedAt"`
 }
@@ -127,7 +128,7 @@ func (s service) grantPeriods(ctx context.Context, tenant int64, all bool) ([]gr
 
 func (s service) grantVersions(ctx context.Context, tenant int64, all bool) ([]grantVersion, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT v.id,v.period_id,v.scheme_id,v.funding_source_id,v.version_no,v.scheme_name,v.source_name,
-  CAST(v.budget_idr AS CHAR),v.quota,v.duration_months,v.active_lecturer,v.manual_requirements,v.published_at
+  CAST(v.budget_idr AS CHAR),v.quota,v.duration_months,v.active_lecturer,v.min_jafung,v.manual_requirements,v.published_at
   FROM grant_scheme_versions v JOIN grant_periods p ON p.id=v.period_id AND p.institution_id=v.institution_id
   WHERE v.institution_id=? AND (? OR (p.opens_at<=UTC_TIMESTAMP() AND p.closes_at>UTC_TIMESTAMP()
    AND v.version_no=(SELECT MAX(x.version_no) FROM grant_scheme_versions x WHERE x.institution_id=v.institution_id AND x.period_id=v.period_id AND x.scheme_id=v.scheme_id)))
@@ -139,7 +140,7 @@ func (s service) grantVersions(ctx context.Context, tenant int64, all bool) ([]g
 	items := []grantVersion{}
 	for rows.Next() {
 		var v grantVersion
-		if err := rows.Scan(&v.ID, &v.PeriodID, &v.SchemeID, &v.SourceID, &v.Version, &v.Scheme, &v.Source, &v.Budget, &v.Quota, &v.Duration, &v.ActiveLecturer, &v.Manual, &v.PublishedAt); err != nil {
+		if err := rows.Scan(&v.ID, &v.PeriodID, &v.SchemeID, &v.SourceID, &v.Version, &v.Scheme, &v.Source, &v.Budget, &v.Quota, &v.Duration, &v.ActiveLecturer, &v.MinJafung, &v.Manual, &v.PublishedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, v)
@@ -212,6 +213,7 @@ func (s service) publishGrantVersion(c *gin.Context, a actor) {
 		Budget             string
 		Quota, Duration    int
 		ActiveLecturer     bool
+		MinJafung          string
 		Manual             string
 	}
 	if c.ShouldBindJSON(&input) != nil {
@@ -220,8 +222,9 @@ func (s service) publishGrantVersion(c *gin.Context, a actor) {
 	}
 	budget, err := strconv.ParseUint(input.Budget, 10, 63)
 	input.Manual = strings.TrimSpace(input.Manual)
+	input.MinJafung = strings.TrimSpace(input.MinJafung)
 	if err != nil || input.SchemeID < 1 || input.SourceID < 1 || input.Quota < 1 || input.Quota > 1000000 ||
-		input.Duration < 1 || input.Duration > 120 || len(input.Manual) > 2000 {
+		input.Duration < 1 || input.Duration > 120 || len(input.Manual) > 2000 || !validJafungValues[input.MinJafung] {
 		c.Status(400)
 		return
 	}
@@ -246,8 +249,8 @@ func (s service) publishGrantVersion(c *gin.Context, a actor) {
 			return 0, err
 		}
 		result, err := tx.ExecContext(ctx, `INSERT INTO grant_scheme_versions
-   (institution_id,period_id,scheme_id,funding_source_id,version_no,scheme_name,source_name,budget_idr,quota,duration_months,active_lecturer,manual_requirements)
-   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, a.tenant, period, input.SchemeID, input.SourceID, version, scheme, source, budget, input.Quota, input.Duration, input.ActiveLecturer, input.Manual)
+   (institution_id,period_id,scheme_id,funding_source_id,version_no,scheme_name,source_name,budget_idr,quota,duration_months,active_lecturer,min_jafung,manual_requirements)
+   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, a.tenant, period, input.SchemeID, input.SourceID, version, scheme, source, budget, input.Quota, input.Duration, input.ActiveLecturer, input.MinJafung, input.Manual)
 		if err != nil {
 			return 0, err
 		}
@@ -264,12 +267,12 @@ func (s service) grantEligibility(c *gin.Context, a actor) {
 	ctx := c.Request.Context()
 	var periodID int64
 	var required, open, current bool
-	var manual string
-	err := s.db.QueryRowContext(ctx, `SELECT v.period_id,v.active_lecturer,v.manual_requirements,
+	var minJafung, manual string
+	err := s.db.QueryRowContext(ctx, `SELECT v.period_id,v.active_lecturer,v.min_jafung,v.manual_requirements,
   p.opens_at<=UTC_TIMESTAMP() AND p.closes_at>UTC_TIMESTAMP(),
   v.version_no=(SELECT MAX(x.version_no) FROM grant_scheme_versions x WHERE x.institution_id=v.institution_id AND x.period_id=v.period_id AND x.scheme_id=v.scheme_id)
   FROM grant_scheme_versions v JOIN grant_periods p ON p.id=v.period_id AND p.institution_id=v.institution_id
-  WHERE v.institution_id=? AND v.id=?`, a.tenant, id).Scan(&periodID, &required, &manual, &open, &current)
+  WHERE v.institution_id=? AND v.id=?`, a.tenant, id).Scan(&periodID, &required, &minJafung, &manual, &open, &current)
 	if err == sql.ErrNoRows {
 		c.Status(404)
 		return
@@ -282,10 +285,14 @@ func (s service) grantEligibility(c *gin.Context, a actor) {
 		c.Status(404)
 		return
 	}
-	var matches, active, withCode, overdue int
+	var matches, active, withNUPTK, overdue int
+	var lecturerJafung string
 	if open && current {
-		if required {
-			if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*),COALESCE(SUM(is_active),0),COALESCE(SUM(is_active AND TRIM(code)<>'' AND TRIM(code)<>'-'),0) FROM lecturers WHERE institution_id=? AND email=?", a.tenant, a.Email).Scan(&matches, &active, &withCode); err != nil {
+		if required || minJafung != "" {
+			if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*),COALESCE(SUM(is_active),0),
+ COALESCE(SUM(is_active AND TRIM(nuptk)<>'' AND TRIM(nuptk)<>'-'),0),
+ COALESCE(MAX(CASE WHEN is_active THEN jafung ELSE '' END),'')
+ FROM lecturers WHERE institution_id=? AND (user_id=? OR (user_id IS NULL AND email=?))`, a.tenant, a.ID, a.Email).Scan(&matches, &active, &withNUPTK, &lecturerJafung); err != nil {
 				c.Status(503)
 				return
 			}
@@ -297,7 +304,7 @@ func (s service) grantEligibility(c *gin.Context, a actor) {
 			return
 		}
 	}
-	result, reasons := assessEligibility(open, current, required, manual, matches, active, withCode, overdue)
+	result, reasons := assessEligibility(open, current, required, minJafung, manual, matches, active, withNUPTK, lecturerJafung, overdue)
 	c.JSON(http.StatusOK, gin.H{"result": result, "reasons": reasons})
 }
 
@@ -320,7 +327,7 @@ func countOverdueReports(ctx context.Context, q queryRower, tenant, userID, curr
 	return overdue, err
 }
 
-func assessEligibility(open, current, required bool, manual string, matches, active, withCode, overdue int) (string, []string) {
+func assessEligibility(open, current, required bool, minJafung, manual string, matches, active, withNUPTK int, lecturerJafung string, overdue int) (string, []string) {
 	if !open || !current {
 		return "ineligible", []string{"Periode belum dibuka, sudah ditutup, atau versi ini sudah digantikan."}
 	}
@@ -330,21 +337,24 @@ func assessEligibility(open, current, required bool, manual string, matches, act
 		status = "ineligible"
 		reasons = append(reasons, fmt.Sprintf("Terdapat %d tunggakan laporan akhir penelitian/pengmas periode sebelumnya yang belum diselesaikan.", overdue))
 	}
-	if required {
+	if required || minJafung != "" {
 		switch {
 		case matches != 1:
-			if status == "eligible" {
-				status = "manual"
-			}
-			reasons = append(reasons, "Status dosen belum dapat diverifikasi. Data dosen harus memakai email akun yang sama dan unik di institusi.")
+			status = "ineligible"
+			reasons = append(reasons, "Akun belum terhubung dengan data Dosen aktif. Hubungi admin atau pastikan akun terhubung di Master Data Dosen.")
 		case active != 1:
 			status = "ineligible"
 			reasons = append(reasons, "Status dosen tercatat nonaktif.")
-		case withCode != 1:
+		case required && withNUPTK != 1:
 			status = "ineligible"
-			reasons = append(reasons, "Dosen wajib memiliki NIDN / NUPTK / NIK yang valid pada Master Data Dosen.")
+			reasons = append(reasons, "NUPTK belum diisi. Lengkapi NUPTK pada menu Pengaturan → Profil Dosen.")
 		default:
-			reasons = append(reasons, "Status dosen aktif dan NIDN/NUPTK/NIK terverifikasi.")
+			if minJafung != "" && jafungRank(lecturerJafung) < jafungRank(minJafung) {
+				status = "ineligible"
+				reasons = append(reasons, fmt.Sprintf("Jabatan Fungsional minimal untuk skema ini adalah %s (jabatan Anda saat ini: %s). Perbarui di Pengaturan → Profil Dosen.", jafungLabel(minJafung), jafungLabel(lecturerJafung)))
+			} else {
+				reasons = append(reasons, fmt.Sprintf("Profil dosen terverifikasi (NUPTK terisi · Jafung: %s).", jafungLabel(lecturerJafung)))
+			}
 		}
 	}
 	if manual != "" {

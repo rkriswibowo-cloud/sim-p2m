@@ -3,6 +3,7 @@ import { ArrowUpRight, Building2, ShieldCheck } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getWorkspaceSession } from "../session";
 import { AppearanceSettings } from "./view";
+import { LecturerProfileSettings } from "./lecturer-profile";
 
 export const metadata = { title: "Pengaturan SIM-P2M" };
 
@@ -13,7 +14,10 @@ export default async function SettingsPage() {
   return <section className="space-y-4">
     <h1 className="text-2xl font-semibold tracking-tight">Pengaturan</h1>
     <div className="grid items-start gap-4 xl:grid-cols-2">
-      <AppearanceSettings />
+      <div className="space-y-4">
+        <AppearanceSettings />
+        <LecturerProfileSettings institutionId={user.institutionId} />
+      </div>
       <div className="space-y-4">
         <Card>
           <CardHeader><CardTitle>Akun dan institusi</CardTitle></CardHeader>
