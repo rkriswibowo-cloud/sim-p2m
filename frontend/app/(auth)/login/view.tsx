@@ -1,15 +1,19 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { GraduationCap } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Input, fieldClass } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
+import { Eye, EyeOff, GraduationCap } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 
 export function LoginForm({ renew }: { renew: boolean }) {
   const [pending, setPending] = useState(renew);
   const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const attempted = useRef(false);
 
   useEffect(() => {
@@ -63,24 +67,97 @@ export function LoginForm({ renew }: { renew: boolean }) {
   }
 
   return (
-    <Card lang="id" className="w-full max-w-md">
-      <CardHeader className="space-y-3">
-        <GraduationCap aria-hidden="true" className="size-7 text-primary" />
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Masuk ke SIM-P2M</h1>
-          <p className="text-sm text-muted-foreground">Universitas Anwar Medika</p>
+    <Card lang="id" className="w-full max-w-[440px] overflow-hidden border-border/80 p-0 shadow-lg">
+      <div className="relative bg-[#dce6f7] px-6 pt-6 pb-10 dark:bg-slate-800/90">
+        <h1 className="text-lg font-semibold tracking-tight text-[#1e3a6e] dark:text-sky-200">
+          Selamat Datang di Aplikasi SIM-P2M
+        </h1>
+        <p className="mt-1 text-sm leading-snug text-[#2c4a7c] dark:text-slate-300">
+          Basis informasi penelitian dan pengabdian kepada masyarakat · Universitas Anwar Medika
+        </p>
+        <div className="absolute -bottom-8 left-6 grid size-16 place-items-center rounded-full border-4 border-card bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-md">
+          <GraduationCap aria-hidden="true" className="size-8" />
         </div>
-      </CardHeader>
-      <CardContent>
+      </div>
+
+      <div className="px-6 pt-12 pb-6">
         <form method="post" className="space-y-4" onSubmit={login}>
-          <Input label="Email" name="email" type="email" autoComplete="username" maxLength={254} required disabled={pending} />
-          <Input label="Kata sandi" name="password" type="password" autoComplete="current-password" maxLength={256} required disabled={pending} />
+          <Input
+            label="Email"
+            name="email"
+            type="email"
+            placeholder="Masukkan Email"
+            autoComplete="username"
+            maxLength={254}
+            required
+            disabled={pending}
+          />
+
+          <div className="space-y-1.5">
+            <label htmlFor="login-password" className="block text-sm font-medium leading-none text-foreground">
+              Password
+            </label>
+            <div className="flex">
+              <input
+                id="login-password"
+                name="password"
+                type={showPassword ? "text" : "password"}
+                placeholder="Masukkan Password"
+                autoComplete="current-password"
+                maxLength={256}
+                required
+                disabled={pending}
+                className={cn(fieldClass, "flex h-9 rounded-r-none border-r-0 px-3 py-1")}
+              />
+              <button
+                type="button"
+                aria-label={showPassword ? "Sembunyikan kata sandi" : "Tampilkan kata sandi"}
+                onClick={() => setShowPassword(prev => !prev)}
+                disabled={pending}
+                className="inline-flex h-9 items-center justify-center rounded-r-lg border border-input bg-muted/60 px-3 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+              >
+                {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+              </button>
+            </div>
+          </div>
+
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={e => setRememberMe(e.target.checked)}
+              disabled={pending}
+              className="size-4 rounded border-input accent-[#1f5cb8]"
+            />
+            <span>Ingat saya</span>
+          </label>
+
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-          <Button type="submit" className="w-full" disabled={pending}>
-            {pending ? "Memproses…" : "Masuk"}
+
+          <Button
+            type="submit"
+            disabled={pending}
+            className="h-10 w-full bg-[#1f5cb8] text-white hover:bg-[#194c99]"
+          >
+            {pending ? "Memproses…" : "Log In"}
           </Button>
         </form>
-      </CardContent>
+
+        <div className="mt-5 text-center">
+          <button
+            type="button"
+            onClick={() => setShowHelp(prev => !prev)}
+            className="text-sm font-medium text-[#1f5cb8] hover:underline dark:text-sky-400"
+          >
+            Kesulitan login? Bantuan
+          </button>
+          {showHelp && (
+            <p className="mt-2 rounded-md border border-border bg-muted/40 p-2.5 text-xs text-muted-foreground">
+              Hubungi Admin LPPM Universitas Anwar Medika untuk aktivasi akun dosen atau pengaturan ulang kata sandi.
+            </p>
+          )}
+        </div>
+      </div>
     </Card>
   );
 }
