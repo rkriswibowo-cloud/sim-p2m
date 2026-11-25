@@ -208,6 +208,10 @@ func (s service) authorize(c *gin.Context, a *actor, permission string) bool {
 }
 
 func (s service) roleForPermission(ctx context.Context, a actor, permission string, role *string) error {
+	if permission == "" {
+		return s.db.QueryRowContext(ctx, `SELECT 'member' FROM memberships
+  WHERE user_id=? AND institution_id=? AND is_active LIMIT 1`, a.ID, a.tenant).Scan(role)
+	}
 	return s.db.QueryRowContext(ctx, `SELECT effective_role FROM effective_membership_permissions
   WHERE user_id=? AND institution_id=? AND permission_code=? ORDER BY effective_role LIMIT 1`, a.ID, a.tenant, permission).Scan(role)
 }
