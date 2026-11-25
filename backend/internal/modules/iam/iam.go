@@ -116,7 +116,7 @@ func (s service) routes(r *gin.RouterGroup) {
 	r.POST("/institutions/:institution/grants/periods", s.mutation(grantManage, s.saveGrantPeriod))
 	r.PUT("/institutions/:institution/grants/periods/:target", s.mutation(grantManage, s.saveGrantPeriod))
 	r.POST("/institutions/:institution/grants/periods/:period/versions", s.mutation(grantManage, s.publishGrantVersion))
-	r.GET("/institutions/:institution/grants/versions/:target/eligibility", s.scoped(grantRead, s.grantEligibility))
+	r.GET("/institutions/:institution/grants/versions/:target/eligibility", s.scoped("", s.grantEligibility))
 	r.GET("/institutions/:institution/master-data/:kind", s.scoped(masterRead, s.listMaster))
 	r.POST("/institutions/:institution/master-data/:kind", s.mutation(masterManage, s.saveMaster))
 	r.PUT("/institutions/:institution/master-data/:kind/:target", s.mutation(masterManage, s.saveMaster))

@@ -87,7 +87,9 @@ export function ResearchPanel() {
   const endpoint = `${base}/institutions/${tenant}/research`;
   const activePeriod = selectedPeriod && options.periods.some(p => p.id === selectedPeriod) ? selectedPeriod : (options.periods[0]?.id ?? 0);
   const periodVersions = options.versions.filter(item => item.periodId === activePeriod);
-  const selectedGrant = options.versions.find(item => item.id === grant);
+  const eligibleVersions = periodVersions.filter(item => eligibilityMap[item.id]?.result !== "ineligible");
+  const ineligibleVersions = periodVersions.filter(item => eligibilityMap[item.id]?.result === "ineligible");
+  const selectedGrant = eligibleVersions.find(item => item.id === grant);
   const currentGrant = options.versions.find(item => item.periodId === proposal?.periodId && item.schemeId === proposal?.schemeId);
   const isRevision = proposal?.status === "submitted" && (proposal.workflowStatus === "admin_revision" || proposal.workflowStatus === "review_revision");
   const writable = mode !== "trial-reader" && (proposal?.status === "draft" || isRevision);
@@ -142,7 +144,7 @@ export function ResearchPanel() {
         }
       }).catch((err: Error) => { if (!controller.signal.aborted) setError(err.message); });
     return () => controller.abort();
-  }, [endpoint, tenant, revision]);
+  }, [base, endpoint, tenant, revision]);
 
   useEffect(() => {
     if (!dirty) return;
@@ -263,12 +265,14 @@ export function ResearchPanel() {
             </select>
           </div>
           {activePeriod > 0 && <div className="space-y-2">
-            <p className="text-sm font-medium">2. Pilih Skema dalam Periode Ini (cek kelayakan otomatis)</p>
+            <p className="text-sm font-medium">2. Pilih Skema yang Memenuhi Syarat</p>
             {periodVersions.length === 0 && <p className="text-xs text-muted-foreground">Belum ada skema diterbitkan pada periode ini.</p>}
+            {periodVersions.length > 0 && eligibleVersions.length === 0 && <p role="alert" className="text-xs text-destructive">
+              Belum ada skema yang memenuhi syarat untuk profil Anda pada periode ini. Lengkapi NUPTK dan Jabatan Fungsional di menu Profil Dosen.
+            </p>}
             <div className="grid gap-2 sm:grid-cols-2">
-              {periodVersions.map(item => {
+              {eligibleVersions.map(item => {
                 const check = eligibilityMap[item.id];
-                const eligible = check ? check.result !== "ineligible" : true;
                 const chosen = grant === item.id;
                 return (
                   <button
@@ -280,8 +284,8 @@ export function ResearchPanel() {
                   >
                     <div className="flex items-start justify-between gap-2">
                       <span className="font-medium text-sm">{item.scheme} · v{item.version}</span>
-                      {check && <span className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium ${eligible ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" : "bg-destructive/15 text-destructive"}`}>
-                        {eligible ? "Memenuhi syarat" : "Tidak memenuhi syarat"}
+                      {check && <span className="shrink-0 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+                        Memenuhi syarat
                       </span>}
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">
@@ -297,11 +301,32 @@ export function ResearchPanel() {
                 );
               })}
             </div>
+            {ineligibleVersions.length > 0 && <details className="pt-1 text-xs text-muted-foreground">
+              <summary className="cursor-pointer font-medium">Lihat {ineligibleVersions.length} skema lain yang belum memenuhi syarat</summary>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                {ineligibleVersions.map(item => {
+                  const check = eligibilityMap[item.id];
+                  return (
+                    <div key={item.id} className="rounded-md border border-border/70 bg-muted/30 p-3 opacity-80">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="font-medium text-sm">{item.scheme} · v{item.version}</span>
+                        <span className="shrink-0 rounded bg-destructive/15 px-1.5 py-0.5 text-[11px] font-medium text-destructive">
+                          Tidak memenuhi syarat
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {item.requireNuptk ? "Wajib NUPTK" : "Tanpa NUPTK (Pemula)"} · Min. {jafungLabels[item.minJafung ?? ""] ?? item.minJafung}
+                      </p>
+                      {check && check.reasons.length > 0 && <ul className="mt-1.5 list-inside list-disc space-y-0.5 text-[11px] text-destructive">
+                        {check.reasons.map(reason => <li key={reason}>{reason}</li>)}
+                      </ul>}
+                    </div>
+                  );
+                })}
+              </div>
+            </details>}
           </div>}
-          {selectedGrant && eligibilityMap[selectedGrant.id]?.result === "ineligible" && <p role="alert" className="text-xs text-destructive">
-            Skema yang dipilih belum memenuhi syarat kelayakan Anda. Pilih skema lain (misalnya skema Pemula) atau lengkapi NUPTK &amp; Jabatan Fungsional di Pengaturan.
-          </p>}
-          <Button size="sm" disabled={!grant || pending || eligibilityMap[grant]?.result === "ineligible"} onClick={() => void run(async () => {
+          <Button size="sm" disabled={!selectedGrant || pending} onClick={() => void run(async () => {
             const response = await api<{ id: number }>(endpoint, json("POST", { grantVersionId: grant }));
             show(await api<Proposal>(`${endpoint}/${response.id}`));
             setRevision(previous => previous + 1);

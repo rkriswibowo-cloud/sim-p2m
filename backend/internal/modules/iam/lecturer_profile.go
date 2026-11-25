@@ -22,7 +22,7 @@ var validJafungValues = map[string]bool{
 
 func jafungRank(j string) int {
 	switch j {
-	case "tenaga_pengajar":
+	case "", "tenaga_pengajar":
 		return 1
 	case "asisten_ahli":
 		return 2
@@ -33,7 +33,7 @@ func jafungRank(j string) int {
 	case "guru_besar":
 		return 5
 	default:
-		return 0
+		return 1
 	}
 }
 
