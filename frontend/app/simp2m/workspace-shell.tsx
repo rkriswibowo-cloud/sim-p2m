@@ -46,6 +46,7 @@ function Navigation({ system, canAccess, canAudit, canMaster, canGrant, canResea
   const master: NavItem[] = [];
   const administration: NavItem[] = [];
   if (canGrant) core.push({ label: "Hibah", href: "/simp2m/hibah", icon: Wallet });
+  core.push({ label: "Profil Dosen", href: "/simp2m/profil-dosen", icon: UserRound });
   if (canResearch) core.push({ label: "Penelitian", href: "/simp2m/penelitian", icon: FlaskConical });
   if (canSelection) core.push({ label: "Seleksi & Review", href: "/simp2m/seleksi", icon: ShieldCheck });
   if (canResearch || canSelection) core.push({ label: "Kontrak & Pendanaan", href: "/simp2m/pendanaan", icon: BriefcaseBusiness });

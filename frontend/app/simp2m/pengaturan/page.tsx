@@ -8,15 +8,16 @@ import { LecturerProfileSettings } from "./lecturer-profile";
 export const metadata = { title: "Pengaturan SIM-P2M" };
 
 export default async function SettingsPage() {
-  const { user } = await getWorkspaceSession();
+  const { user, institutions } = await getWorkspaceSession();
   if (!user) return null;
+  const institutionId = user.institutionId || institutions[0]?.id || 0;
 
   return <section className="space-y-4">
     <h1 className="text-2xl font-semibold tracking-tight">Pengaturan</h1>
     <div className="grid items-start gap-4 xl:grid-cols-2">
       <div className="space-y-4">
         <AppearanceSettings />
-        <LecturerProfileSettings institutionId={user.institutionId} />
+        {institutionId > 0 && <LecturerProfileSettings institutionId={institutionId} />}
       </div>
       <div className="space-y-4">
         <Card>
