@@ -115,7 +115,12 @@ func (s service) researchOptions(c *gin.Context, a actor) {
 		c.Status(503)
 		return
 	}
-	c.JSON(200, gin.H{"periods": periods, "versions": versions, "fields": fields, "lecturers": lecturers, "students": students, "budgetCategories": budgetCategories, "canVerify": canVerify})
+	targetYears, err := s.grantChoices(ctx, a.tenant, "SELECT id,code FROM output_target_years WHERE institution_id=? AND is_active ORDER BY code")
+	if err != nil {
+		c.Status(503)
+		return
+	}
+	c.JSON(200, gin.H{"periods": periods, "versions": versions, "fields": fields, "lecturers": lecturers, "students": students, "budgetCategories": budgetCategories, "targetYears": targetYears, "canVerify": canVerify})
 }
 
 func (s service) listProposals(c *gin.Context, a actor) {

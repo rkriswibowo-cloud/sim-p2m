@@ -33,8 +33,9 @@ var datasets = map[string]dataset{
 	"funding-sources":   {table: "funding_sources"},
 	"scheme-groups":     {table: "scheme_groups"},
 	"schemes":           {table: "schemes", parent: "scheme_groups", parentRequired: true},
-	"research-fields":   {table: "research_fields"},
-	"budget-categories": {table: "budget_categories"},
+	"research-fields":     {table: "research_fields"},
+	"budget-categories":   {table: "budget_categories"},
+	"output-target-years": {table: "output_target_years"},
 }
 
 type masterRecord struct {

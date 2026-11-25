@@ -21,6 +21,7 @@ const datasets = {
   schemes: { name: "Skema", parent: "scheme-groups", relation: "Kelompok skema", required: true },
   "research-fields": { name: "Bidang riset" },
   "budget-categories": { name: "Kategori RAB" },
+  "output-target-years": { name: "Tahun target luaran", codeLabel: "Tahun (angka, misal 2026)" },
 } satisfies Record<string, { name: string; parent?: string; relation?: string; required?: boolean; contact?: boolean; codeLabel?: string }>;
 
 type Kind = keyof typeof datasets;

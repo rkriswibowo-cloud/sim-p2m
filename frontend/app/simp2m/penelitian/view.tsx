@@ -12,7 +12,7 @@ import { PrintPreviewModal } from "./print-views";
 type Mode = "production" | "trial-admin" | "trial-reader";
 type Institution = Choice & { active:boolean; canResearch:boolean };
 type Grant = { id:number; periodId:number; schemeId:number; scheme:string; source:string; version:number; budget:string; duration:number; activeLecturer:boolean; manual:string };
-type Options = { periods:Choice[]; versions:Grant[]; fields:Choice[]; lecturers:Choice[]; students:Choice[]; budgetCategories:Choice[]; canVerify:boolean };
+type Options = { periods:Choice[]; versions:Grant[]; fields:Choice[]; lecturers:Choice[]; students:Choice[]; budgetCategories:Choice[]; targetYears?:Choice[]; canVerify:boolean };
 type ApprovalEntry = { id:number; fromStatus:string; toStatus:string; actorName:string; roleName:string; note:string; revision:number; createdAt:string };
 type PublicReview = { id:number; totalScore:number; recommendation:string; publicComment:string; submittedAt:string };
 type Proposal = {

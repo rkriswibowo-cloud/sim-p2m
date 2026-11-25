@@ -32,7 +32,7 @@ type NavItem = { label: string; href: string; icon?: LucideIcon };
 const masterGroups: { label: string; icon: LucideIcon; kinds: [string, string, LucideIcon][] }[] = [
   { label: "Organisasi", icon: Network, kinds: [["Fakultas", "faculties", Building2], ["Program studi", "study-programs", BookOpen], ["Unit", "units", BriefcaseBusiness]] },
   { label: "SDM", icon: UsersRound, kinds: [["Dosen", "lecturers", UserRound], ["Mahasiswa", "students", GraduationCap], ["Reviewer", "reviewers", ShieldCheck]] },
-  { label: "Riset dan pendanaan", icon: FlaskConical, kinds: [["Sumber dana", "funding-sources", Wallet], ["Kelompok skema", "scheme-groups", Layers3], ["Skema", "schemes", ClipboardList], ["Bidang riset", "research-fields", FlaskConical], ["Kategori RAB", "budget-categories", Wallet]] },
+  { label: "Riset dan pendanaan", icon: FlaskConical, kinds: [["Sumber dana", "funding-sources", Wallet], ["Kelompok skema", "scheme-groups", Layers3], ["Skema", "schemes", ClipboardList], ["Bidang riset", "research-fields", FlaskConical], ["Kategori RAB", "budget-categories", Wallet], ["Tahun target luaran", "output-target-years", CalendarDays]] },
 ];
 
 function Navigation({ system, canAccess, canAudit, canMaster, canGrant, canResearch, canCommunity, canDocuments, canReports, canSelection, compact, close }: Omit<ShellProps, "name" | "institution" | "date" | "footer" | "children"> & { compact?: boolean; close?: () => void }) {

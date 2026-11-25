@@ -11,8 +11,8 @@ type TextKey = "object" | "location" | "starts" | "ends" | "partner" | "contribu
 type ListKey = "team" | "students" | "outputs" | "costs" | "schedule";
 type Row = Record<string, string | number>;
 export type ProposalData = Partial<Record<TextKey, string> & Record<ListKey, Row[]> & { keywords: string[] }>;
-type Column = { key: string; name: string; type?: "number" | "lecturers" | "students" | "budgetCategory" | "outputKind" };
-type OptionLists = { fields: Choice[]; lecturers: Choice[]; students: Choice[]; budgetCategories: Choice[] };
+type Column = { key: string; name: string; type?: "number" | "lecturers" | "students" | "budgetCategory" | "outputKind" | "outputStatus" | "outputYear" };
+type OptionLists = { fields: Choice[]; lecturers: Choice[]; students: Choice[]; budgetCategories: Choice[]; targetYears?: Choice[] };
 
 const outputKindOptions = [
   "Publikasi Artikel Jurnal Nasional Terakreditasi",
@@ -25,10 +25,12 @@ const outputKindOptions = [
   "Produk / Prototipe",
 ];
 
+const outputStatusOptions = ["Submit", "Review", "Accept", "Terbit"];
+
 const rowDefinitions: Record<ListKey, { title: string; columns: Column[] }> = {
   team: { title: "Anggota dosen", columns: [{key:"id",name:"Dosen",type:"lecturers"},{key:"expertise",name:"Keahlian"},{key:"hours",name:"Jam per minggu",type:"number"},{key:"task",name:"Tugas"}] },
   students: { title: "Mahasiswa", columns: [{key:"id",name:"Mahasiswa",type:"students"},{key:"activity",name:"Bentuk keterlibatan"},{key:"thesis",name:"Judul tugas akhir (opsional)"}] },
-  outputs: { title: "Target luaran", columns: [{key:"kind",name:"Jenis luaran",type:"outputKind"},{key:"status",name:"Status target"},{key:"year",name:"Tahun target",type:"number"}] },
+  outputs: { title: "Target luaran", columns: [{key:"kind",name:"Jenis luaran",type:"outputKind"},{key:"status",name:"Status target",type:"outputStatus"},{key:"year",name:"Tahun target",type:"outputYear"}] },
   costs: { title: "Rincian anggaran", columns: [{key:"categoryId",name:"Kategori",type:"budgetCategory"},{key:"item",name:"Item"},{key:"reason",name:"Justifikasi"},{key:"quantity",name:"Kuantitas"},{key:"unit",name:"Satuan"},{key:"price",name:"Harga satuan (Rp)"}] },
   schedule: { title: "Jadwal kegiatan", columns: [{key:"name",name:"Tahapan"},{key:"output",name:"Luaran tahapan"},{key:"indicator",name:"Indikator"},{key:"person",name:"Penanggung jawab"},{key:"from",name:"Mulai bulan ke-",type:"number"},{key:"to",name:"Selesai bulan ke-",type:"number"}] },
 };
@@ -85,6 +87,29 @@ export function ProposalFields({ step, data, options, title, field, budget, cons
                 <option value="">Pilih jenis luaran</option>
                 {outputKindOptions.map(opt=><option key={opt} value={opt}>{opt}</option>)}
                 {!!currentKind && !outputKindOptions.includes(currentKind) && <option value={currentKind}>{currentKind}</option>}
+              </select>
+            </div>;
+          }
+          if(column.type==="outputStatus") {
+            const currentStatus = String(item[column.key] || "");
+            return <div key={column.key} className="min-w-0">
+              <label htmlFor={id} className="mb-1 block">{column.name}</label>
+              <select id={id} className="w-full" disabled={disabled} value={currentStatus} onChange={event=>update(event.target.value)}>
+                <option value="">Pilih status target</option>
+                {outputStatusOptions.map(opt=><option key={opt} value={opt}>{opt}</option>)}
+                {!!currentStatus && !outputStatusOptions.includes(currentStatus) && <option value={currentStatus}>{currentStatus}</option>}
+              </select>
+            </div>;
+          }
+          if(column.type==="outputYear") {
+            const currentYear = item[column.key] ? String(item[column.key]) : "";
+            const years = (options.targetYears ?? []).map(y => y.name.trim()).filter(y => /^\d+$/.test(y));
+            return <div key={column.key} className="min-w-0">
+              <label htmlFor={id} className="mb-1 block">{column.name}</label>
+              <select id={id} className="w-full" disabled={disabled} value={currentYear} onChange={event=>update(Number(event.target.value))}>
+                <option value="">Pilih tahun target</option>
+                {years.map(yr=><option key={yr} value={yr}>{yr}</option>)}
+                {!!currentYear && !years.includes(currentYear) && <option value={currentYear}>{currentYear}</option>}
               </select>
             </div>;
           }
