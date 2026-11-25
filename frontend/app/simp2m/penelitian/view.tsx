@@ -284,7 +284,7 @@ export function ResearchPanel() {
                     className={`rounded-md border p-3 text-left transition ${chosen ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border hover:bg-muted/40"}`}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <span className="font-medium text-sm">{item.scheme} · v{item.version}</span>
+                      <span className="font-medium text-sm">{item.scheme}</span>
                       {check && <span className="shrink-0 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
                         Memenuhi syarat
                       </span>}
@@ -315,7 +315,7 @@ export function ResearchPanel() {
                   return (
                     <div key={item.id} className="rounded-md border border-border/70 bg-muted/30 p-3 opacity-80">
                       <div className="flex items-start justify-between gap-2">
-                        <span className="font-medium text-sm">{item.scheme} · v{item.version}</span>
+                        <span className="font-medium text-sm">{item.scheme}</span>
                         <span className="shrink-0 rounded bg-destructive/15 px-1.5 py-0.5 text-[11px] font-medium text-destructive">
                           Tidak memenuhi syarat
                         </span>
@@ -346,7 +346,12 @@ export function ResearchPanel() {
             <CardTitle>{draft.title || "Draf usulan"} · {proposal.scheme}</CardTitle>
             <Button size="sm" variant="outline" disabled={scopeLocked} onClick={() => { setProposal(undefined); setError(""); }}>Kembali ke daftar</Button>
           </div>
-          <p className="mt-1 text-xs text-muted-foreground">{proposal.period} · Skema versi {proposal.grantVersion} · Ketua {proposal.owner} · {proposal.status === "submitted" ? `Nomor usulan ${proposal.id}` : "Draf"}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span>{proposal.period} · Ketua {proposal.owner}</span>
+            <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${proposal.status === "submitted" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" : "bg-amber-500/15 text-amber-800 dark:text-amber-300"}`}>
+              {proposal.status === "submitted" ? `Submitted (#${proposal.id})` : "Draft"}
+            </span>
+          </div>
           {getMinOutputInfo(proposal.scheme) && (
             <p className="mt-1 text-xs text-muted-foreground">
               <strong>Informasi Minimal Luaran ({proposal.scheme}):</strong> {getMinOutputInfo(proposal.scheme)}
@@ -568,7 +573,12 @@ export function ResearchPanel() {
           {items?.length === 0 && <p className="text-sm text-muted-foreground">Belum ada usulan penelitian.</p>}
           {items?.map(item => <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-2">
             <div className="min-w-0"><p className="break-words text-sm font-medium">{item.title || "Draf tanpa judul"}</p>
-              <p className="text-xs text-muted-foreground">{item.scheme} · {item.period} · {item.status === "submitted" ? `Dikirim #${item.id}` : "Draf"}</p>
+              <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span>{item.scheme} · {item.period}</span>
+                <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${item.status === "submitted" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" : "bg-amber-500/15 text-amber-800 dark:text-amber-300"}`}>
+                  {item.status === "submitted" ? `Submitted (#${item.id})` : "Draft"}
+                </span>
+              </div>
             </div>
             <div className="flex flex-wrap gap-2">
               {item.status === "draft" && mode !== "trial-reader" && (
