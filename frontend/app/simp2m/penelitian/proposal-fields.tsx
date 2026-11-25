@@ -25,7 +25,7 @@ const outputKindOptions = [
   "Produk / Prototipe",
 ];
 
-const outputStatusOptions = ["Submit", "Review", "Accept", "Terbit"];
+const outputStatusOptions = ["Submit", "Review", "Accepted", "Terbit"];
 
 const rowDefinitions: Record<ListKey, { title: string; columns: Column[] }> = {
   team: { title: "Anggota dosen", columns: [{key:"id",name:"Dosen",type:"lecturers"},{key:"expertise",name:"Keahlian"},{key:"hours",name:"Jam per minggu",type:"number"},{key:"task",name:"Tugas"}] },
