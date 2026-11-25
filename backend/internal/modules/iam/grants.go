@@ -19,15 +19,20 @@ const grantManage = "grants.manage"
 var publishedPeriod = errors.New("grant period already published")
 
 type grantPeriod struct {
-	ID           int64     `json:"id"`
-	Code         string    `json:"code"`
-	Name         string    `json:"name"`
-	ProposalYear int       `json:"proposalYear"`
-	ProjectYear  int       `json:"projectYear"`
-	BudgetYear   int       `json:"budgetYear"`
-	OpensAt      time.Time `json:"opensAt"`
-	ClosesAt     time.Time `json:"closesAt"`
-	State        string    `json:"state"`
+	ID                 int64     `json:"id"`
+	Code               string    `json:"code"`
+	Name               string    `json:"name"`
+	ProposalYear       int       `json:"proposalYear"`
+	ProjectYear        int       `json:"projectYear"`
+	BudgetYear         int       `json:"budgetYear"`
+	OpensAt            time.Time `json:"opensAt"`
+	ClosesAt           time.Time `json:"closesAt"`
+	ReviewStart        string    `json:"reviewStart"`
+	ReviewEnd          string    `json:"reviewEnd"`
+	ExecutionStart     string    `json:"executionStart"`
+	ProgressReportDate string    `json:"progressReportDate"`
+	FinalReportDate    string    `json:"finalReportDate"`
+	State              string    `json:"state"`
 }
 
 type grantVersion struct {
@@ -106,8 +111,46 @@ func (s service) grantOverview(c *gin.Context, a actor) {
 	c.JSON(200, gin.H{"periods": periods, "versions": versions, "canManage": administrator})
 }
 
+func (s service) grantTimeline(c *gin.Context, a actor) {
+	ctx := c.Request.Context()
+	rows, err := s.db.QueryContext(ctx, `SELECT id,code,name,proposal_year,project_year,budget_year,opens_at,closes_at,
+  COALESCE(DATE_FORMAT(review_start,'%Y-%m-%d'),''),
+  COALESCE(DATE_FORMAT(review_end,'%Y-%m-%d'),''),
+  COALESCE(DATE_FORMAT(execution_start,'%Y-%m-%d'),''),
+  COALESCE(DATE_FORMAT(progress_report_date,'%Y-%m-%d'),''),
+  COALESCE(DATE_FORMAT(final_report_date,'%Y-%m-%d'),''),
+  CASE WHEN UTC_TIMESTAMP()<opens_at THEN 'scheduled' WHEN UTC_TIMESTAMP()>=closes_at THEN 'closed' ELSE 'open' END
+  FROM grant_periods WHERE institution_id=?
+  ORDER BY (UTC_TIMESTAMP() BETWEEN opens_at AND closes_at) DESC, opens_at DESC, id DESC LIMIT 5`, a.tenant)
+	if err != nil {
+		c.Status(503)
+		return
+	}
+	defer rows.Close()
+	items := []grantPeriod{}
+	for rows.Next() {
+		var row grantPeriod
+		if err := rows.Scan(&row.ID, &row.Code, &row.Name, &row.ProposalYear, &row.ProjectYear, &row.BudgetYear, &row.OpensAt, &row.ClosesAt,
+			&row.ReviewStart, &row.ReviewEnd, &row.ExecutionStart, &row.ProgressReportDate, &row.FinalReportDate, &row.State); err != nil {
+			c.Status(503)
+			return
+		}
+		items = append(items, row)
+	}
+	if rows.Err() != nil {
+		c.Status(503)
+		return
+	}
+	c.JSON(200, gin.H{"periods": items, "serverNow": time.Now().UTC()})
+}
+
 func (s service) grantPeriods(ctx context.Context, tenant int64, all bool) ([]grantPeriod, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id,code,name,proposal_year,project_year,budget_year,opens_at,closes_at,
+  COALESCE(DATE_FORMAT(review_start,'%Y-%m-%d'),''),
+  COALESCE(DATE_FORMAT(review_end,'%Y-%m-%d'),''),
+  COALESCE(DATE_FORMAT(execution_start,'%Y-%m-%d'),''),
+  COALESCE(DATE_FORMAT(progress_report_date,'%Y-%m-%d'),''),
+  COALESCE(DATE_FORMAT(final_report_date,'%Y-%m-%d'),''),
   CASE WHEN UTC_TIMESTAMP()<opens_at THEN 'scheduled' WHEN UTC_TIMESTAMP()>=closes_at THEN 'closed' ELSE 'open' END
   FROM grant_periods WHERE institution_id=? AND (? OR (opens_at<=UTC_TIMESTAMP() AND closes_at>UTC_TIMESTAMP()
    AND EXISTS (SELECT 1 FROM grant_scheme_versions v WHERE v.institution_id=grant_periods.institution_id AND v.period_id=grant_periods.id)))
@@ -119,7 +162,8 @@ func (s service) grantPeriods(ctx context.Context, tenant int64, all bool) ([]gr
 	items := []grantPeriod{}
 	for rows.Next() {
 		var row grantPeriod
-		if err := rows.Scan(&row.ID, &row.Code, &row.Name, &row.ProposalYear, &row.ProjectYear, &row.BudgetYear, &row.OpensAt, &row.ClosesAt, &row.State); err != nil {
+		if err := rows.Scan(&row.ID, &row.Code, &row.Name, &row.ProposalYear, &row.ProjectYear, &row.BudgetYear, &row.OpensAt, &row.ClosesAt,
+			&row.ReviewStart, &row.ReviewEnd, &row.ExecutionStart, &row.ProgressReportDate, &row.FinalReportDate, &row.State); err != nil {
 			return nil, err
 		}
 		items = append(items, row)
@@ -149,11 +193,25 @@ func (s service) grantVersions(ctx context.Context, tenant int64, all bool) ([]g
 	return items, rows.Err()
 }
 
+func parseOptionalDate(raw string) (sql.NullString, bool) {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return sql.NullString{}, true
+	}
+	if _, err := time.Parse("2006-01-02", s); err != nil {
+		return sql.NullString{}, false
+	}
+	return sql.NullString{String: s, Valid: true}, true
+}
+
 func (s service) saveGrantPeriod(c *gin.Context, a actor) {
 	var input struct {
 		Code, Name                            string
 		ProposalYear, ProjectYear, BudgetYear int
 		OpensAt, ClosesAt                     time.Time
+		ReviewStart, ReviewEnd                string
+		ExecutionStart                        string
+		ProgressReportDate, FinalReportDate   string
 	}
 	if c.ShouldBindJSON(&input) != nil {
 		c.Status(400)
@@ -162,9 +220,15 @@ func (s service) saveGrantPeriod(c *gin.Context, a actor) {
 	input.Code = strings.ToUpper(strings.TrimSpace(input.Code))
 	input.Name = strings.TrimSpace(input.Name)
 	validYear := func(year int) bool { return year >= 2000 && year <= 2200 }
+	revStart, ok1 := parseOptionalDate(input.ReviewStart)
+	revEnd, ok2 := parseOptionalDate(input.ReviewEnd)
+	execStart, ok3 := parseOptionalDate(input.ExecutionStart)
+	progDate, ok4 := parseOptionalDate(input.ProgressReportDate)
+	finalDate, ok5 := parseOptionalDate(input.FinalReportDate)
 	if input.Code == "" || len(input.Code) > 64 || input.Name == "" || len(input.Name) > 200 ||
 		!validYear(input.ProposalYear) || !validYear(input.ProjectYear) || !validYear(input.BudgetYear) ||
-		!input.ClosesAt.After(input.OpensAt) || !validYear(input.OpensAt.Year()) || !validYear(input.ClosesAt.Year()) {
+		!input.ClosesAt.After(input.OpensAt) || !validYear(input.OpensAt.Year()) || !validYear(input.ClosesAt.Year()) ||
+		!ok1 || !ok2 || !ok3 || !ok4 || !ok5 {
 		c.Status(400)
 		return
 	}
@@ -183,12 +247,18 @@ func (s service) saveGrantPeriod(c *gin.Context, a actor) {
 			if err := tx.QueryRowContext(ctx, "SELECT id FROM grant_periods WHERE institution_id=? AND id=? FOR UPDATE", a.tenant, id).Scan(&locked); err != nil {
 				return 0, err
 			}
-			_, err := tx.ExecContext(ctx, `UPDATE grant_periods SET code=?,name=?,proposal_year=?,project_year=?,budget_year=?,opens_at=?,closes_at=?
-			 WHERE institution_id=? AND id=?`, input.Code, input.Name, input.ProposalYear, input.ProjectYear, input.BudgetYear, input.OpensAt.UTC(), input.ClosesAt.UTC(), a.tenant, id)
+			_, err := tx.ExecContext(ctx, `UPDATE grant_periods SET code=?,name=?,proposal_year=?,project_year=?,budget_year=?,opens_at=?,closes_at=?,
+   review_start=?,review_end=?,execution_start=?,progress_report_date=?,final_report_date=?
+   WHERE institution_id=? AND id=?`,
+				input.Code, input.Name, input.ProposalYear, input.ProjectYear, input.BudgetYear, input.OpensAt.UTC(), input.ClosesAt.UTC(),
+				revStart, revEnd, execStart, progDate, finalDate, a.tenant, id)
 			return id, err
 		}
-		result, err := tx.ExecContext(ctx, `INSERT INTO grant_periods (institution_id,code,name,proposal_year,project_year,budget_year,opens_at,closes_at)
-   VALUES (?,?,?,?,?,?,?,?)`, a.tenant, input.Code, input.Name, input.ProposalYear, input.ProjectYear, input.BudgetYear, input.OpensAt.UTC(), input.ClosesAt.UTC())
+		result, err := tx.ExecContext(ctx, `INSERT INTO grant_periods
+   (institution_id,code,name,proposal_year,project_year,budget_year,opens_at,closes_at,review_start,review_end,execution_start,progress_report_date,final_report_date)
+   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			a.tenant, input.Code, input.Name, input.ProposalYear, input.ProjectYear, input.BudgetYear, input.OpensAt.UTC(), input.ClosesAt.UTC(),
+			revStart, revEnd, execStart, progDate, finalDate)
 		if err != nil {
 			return 0, err
 		}

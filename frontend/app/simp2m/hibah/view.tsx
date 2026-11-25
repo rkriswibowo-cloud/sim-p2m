@@ -14,7 +14,9 @@ type Choice = { id: number; name: string };
 type Institution = Choice & { active: boolean; canGrantRead: boolean };
 type Period = Choice & {
   code: string; proposalYear: number; projectYear: number; budgetYear: number;
-  opensAt: string; closesAt: string; state: "scheduled" | "open" | "closed";
+  opensAt: string; closesAt: string;
+  reviewStart?: string; reviewEnd?: string; executionStart?: string; progressReportDate?: string; finalReportDate?: string;
+  state: "scheduled" | "open" | "closed";
 };
 type Version = {
   id: number; periodId: number; schemeId: number; sourceId: number; version: number;
@@ -148,6 +150,11 @@ export function GrantPanel() {
         code: fields.get("code"), name: fields.get("name"),
         proposalYear: Number(fields.get("proposalYear")), projectYear: Number(fields.get("projectYear")),
         budgetYear: Number(fields.get("budgetYear")), opensAt: dateWithOffset(fields.get("opensAt")), closesAt: dateWithOffset(fields.get("closesAt")),
+        reviewStart: String(fields.get("reviewStart") ?? ""),
+        reviewEnd: String(fields.get("reviewEnd") ?? ""),
+        executionStart: String(fields.get("executionStart") ?? ""),
+        progressReportDate: String(fields.get("progressReportDate") ?? ""),
+        finalReportDate: String(fields.get("finalReportDate") ?? ""),
       } : {
         schemeId: Number(fields.get("schemeId")), sourceId: Number(fields.get("sourceId")),
         budget: fields.get("budget"), quota: Number(fields.get("quota")), duration: Number(fields.get("duration")),
@@ -262,6 +269,11 @@ export function GrantPanel() {
             <Input label="Tahun anggaran" name="budgetYear" type="number" min={2000} max={2200} required defaultValue={editingPeriod?.budgetYear} />
             <Input label="Mulai pendaftaran (WIB)" name="opensAt" type="datetime-local" required defaultValue={dateForInput(editingPeriod?.opensAt)} />
             <Input label="Tutup pendaftaran (WIB)" name="closesAt" type="datetime-local" required defaultValue={dateForInput(editingPeriod?.closesAt)} />
+            <Input label="Mulai review" name="reviewStart" type="date" defaultValue={editingPeriod?.reviewStart ?? ""} />
+            <Input label="Selesai review" name="reviewEnd" type="date" defaultValue={editingPeriod?.reviewEnd ?? ""} />
+            <Input label="Mulai pelaksanaan" name="executionStart" type="date" defaultValue={editingPeriod?.executionStart ?? ""} />
+            <Input label="Laporan kemajuan 75%" name="progressReportDate" type="date" defaultValue={editingPeriod?.progressReportDate ?? ""} />
+            <Input label="Laporan akhir" name="finalReportDate" type="date" defaultValue={editingPeriod?.finalReportDate ?? ""} />
             <div className="workspace-form-actions"><Button type="button" variant="outline" disabled={pending} onClick={() => setCreate(false)}>Batal</Button><Button disabled={pending}>Simpan periode</Button></div>
           </form>
         </CardContent>
@@ -281,6 +293,11 @@ export function GrantPanel() {
         <CardContent className="space-y-2">
           <p className="text-sm">{localDate.format(new Date(selected.opensAt))} – {localDate.format(new Date(selected.closesAt))} WIB</p>
           <p className="text-xs text-muted-foreground">{selected.code} · Usulan {selected.proposalYear} · Pelaksanaan {selected.projectYear} · Anggaran {selected.budgetYear}</p>
+          {(selected.reviewStart || selected.executionStart || selected.progressReportDate || selected.finalReportDate) && (
+            <p className="text-xs text-muted-foreground">
+              Timeline: Review {selected.reviewStart || "-"} s.d. {selected.reviewEnd || "-"} · Pelaksanaan {selected.executionStart || "-"} · Lap. Kemajuan 75% {selected.progressReportDate || "-"} · Lap. Akhir {selected.finalReportDate || "-"}
+            </p>
+          )}
           <div className="flex flex-wrap gap-2">
             {overview?.canManage && !create && <Button size="sm" variant="outline" disabled={pending} onClick={() => {setRevisionForm(undefined);setEditingPeriod(selected);setCreate(true);}}>Edit periode</Button>}
             {overview?.canManage && selected.state !== "closed" && !revisionForm && <Button size="sm" variant="outline" disabled={pending} onClick={() => {setCreate(false);setRevisionForm({});}}>Tambah skema</Button>}

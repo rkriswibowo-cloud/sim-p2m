@@ -112,6 +112,7 @@ func (s service) routes(r *gin.RouterGroup) {
 	r.PUT("/institutions/:institution/community/:target", s.mutationWithLimit(communityDraft, s.saveCommunity, 128<<10))
 	r.DELETE("/institutions/:institution/community/:target", s.mutation(communityDraft, s.archiveCommunity))
 	r.GET("/institutions/:institution/grants", s.scoped(grantRead, s.grantOverview))
+	r.GET("/institutions/:institution/grants/timeline", s.scoped("", s.grantTimeline))
 	r.GET("/institutions/:institution/grants/options", s.scoped(grantManage, s.grantOptions))
 	r.POST("/institutions/:institution/grants/periods", s.mutation(grantManage, s.saveGrantPeriod))
 	r.PUT("/institutions/:institution/grants/periods/:target", s.mutation(grantManage, s.saveGrantPeriod))

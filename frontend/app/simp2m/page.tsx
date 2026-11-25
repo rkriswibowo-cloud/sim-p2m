@@ -2,6 +2,7 @@ import { ArrowRight, BookOpenCheck, Building2, ClipboardList, FlaskConical, Fold
 import Link from "next/link";
 import type { Metadata } from "next";
 import { getWorkspaceSession } from "./session";
+import { PeriodTimelineWidget } from "./period-timeline";
 
 export const metadata: Metadata = {
   title: { absolute: "Dashboard | SIM-P2M" },
@@ -61,6 +62,9 @@ export default async function Dashboard() {
           {user.canMaster && <Link href="/simp2m/master-data" className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-sm font-medium hover:bg-accent">Buka Master Data <ArrowRight size={15} aria-hidden="true" /></Link>}
         </div>
       </section>
+      {(user.institutionId || institutions[0]?.id) ? (
+        <PeriodTimelineWidget institutionId={user.institutionId || institutions[0]?.id || 0} />
+      ) : null}
       {activeInstitution && <section aria-labelledby="dashboard-metrics">
         <div className="mb-2 flex flex-wrap items-baseline justify-between gap-1">
           <h2 id="dashboard-metrics" className="text-sm font-semibold">Ringkasan master data</h2>
