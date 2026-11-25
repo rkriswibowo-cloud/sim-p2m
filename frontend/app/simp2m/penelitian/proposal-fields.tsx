@@ -136,7 +136,7 @@ export function ProposalFields({ step, data, options, title, field, budget, cons
         })}
         {!disabled && <Button type="button" variant="ghost" size="sm" className="shrink-0 justify-self-start text-destructive"
           aria-label={`Hapus baris ${definition.title} ${index+1}`} onClick={()=>onData({...data,[key]:items.filter((_,i)=>i!==index)})}>{singleRowGrid[key] ? "Hapus" : "Hapus baris"}</Button>}
-        {key==="team" && item.id && (() => {
+        {key==="team" && Number(item.id) > 0 && (() => {
           const c = consents?.find(row => row.lecturerId === Number(item.id));
           if (!c) return <span className="whitespace-nowrap pb-2 text-xs text-muted-foreground">Menunggu simpan</span>;
           const label = c.status === "approved" ? "Disetujui" : c.status === "rejected" ? `Ditolak${c.note ? `: ${c.note}` : ""}` : "Menunggu persetujuan";
