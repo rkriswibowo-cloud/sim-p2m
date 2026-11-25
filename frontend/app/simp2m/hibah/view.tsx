@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
+import { formatGrantMonth, grantMonthBounds } from "../grant-schedule";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -163,6 +164,9 @@ export function GrantPanel() {
   async function submit(event: FormEvent<HTMLFormElement>, kind: "period" | "version") {
     event.preventDefault();
     const fields = new FormData(event.currentTarget);
+    const review = grantMonthBounds(String(fields.get("reviewMonth") ?? ""));
+    const execution = grantMonthBounds(String(fields.get("executionMonth") ?? ""));
+    const finalReport = grantMonthBounds(String(fields.get("finalReportMonth") ?? ""));
     setPending(true);
     setError("");
     try {
@@ -170,11 +174,11 @@ export function GrantPanel() {
         code: fields.get("code"), name: fields.get("name"), program,
         proposalYear: Number(fields.get("proposalYear")), projectYear: Number(fields.get("projectYear")),
         budgetYear: Number(fields.get("budgetYear")), opensAt: dateWithOffset(fields.get("opensAt")), closesAt: dateWithOffset(fields.get("closesAt")),
-        reviewStart: String(fields.get("reviewStart") ?? ""),
-        reviewEnd: String(fields.get("reviewEnd") ?? ""),
-        executionStart: String(fields.get("executionStart") ?? ""),
+        reviewStart: program === "community" ? review.first : String(fields.get("reviewStart") ?? ""),
+        reviewEnd: program === "community" ? review.last : String(fields.get("reviewEnd") ?? ""),
+        executionStart: program === "community" ? execution.first : String(fields.get("executionStart") ?? ""),
         progressReportDate: String(fields.get("progressReportDate") ?? ""),
-        finalReportDate: String(fields.get("finalReportDate") ?? ""),
+        finalReportDate: program === "community" ? finalReport.first : String(fields.get("finalReportDate") ?? ""),
         allowDailyJournal: fields.has("allowDailyJournal"),
         allowProgressReport: fields.has("allowProgressReport"),
         allowFinalReport: fields.has("allowFinalReport"),
@@ -332,13 +336,22 @@ export function GrantPanel() {
             <Input label="Tahun usulan" name="proposalYear" type="number" min={2000} max={2200} required defaultValue={editingPeriod?.proposalYear} />
             <Input label="Tahun pelaksanaan" name="projectYear" type="number" min={2000} max={2200} required defaultValue={editingPeriod?.projectYear} />
             <Input label="Tahun anggaran" name="budgetYear" type="number" min={2000} max={2200} required defaultValue={editingPeriod?.budgetYear} />
-            <Input label="Mulai pendaftaran (WIB)" name="opensAt" type="datetime-local" required defaultValue={dateForInput(editingPeriod?.opensAt)} />
-            <Input label="Tutup pendaftaran (WIB)" name="closesAt" type="datetime-local" required defaultValue={dateForInput(editingPeriod?.closesAt)} />
-            <Input label="Mulai review" name="reviewStart" type="date" defaultValue={editingPeriod?.reviewStart ?? ""} />
-            <Input label="Selesai review" name="reviewEnd" type="date" defaultValue={editingPeriod?.reviewEnd ?? ""} />
-            <Input label="Mulai pelaksanaan" name="executionStart" type="date" defaultValue={editingPeriod?.executionStart ?? ""} />
-            {program === "research" && <Input label="Laporan kemajuan 75%" name="progressReportDate" type="date" defaultValue={editingPeriod?.progressReportDate ?? ""} />}
-            <Input label="Laporan akhir" name="finalReportDate" type="date" defaultValue={editingPeriod?.finalReportDate ?? ""} />
+            <fieldset className="col-span-full grid min-w-0 gap-3 rounded-md border border-border p-3 sm:grid-cols-2 xl:grid-cols-3">
+              <legend className="px-1 text-sm font-semibold">Jadwal tahapan · WIB</legend>
+              <Input label="Pengajuan proposal dibuka" name="opensAt" type="datetime-local" required defaultValue={dateForInput(editingPeriod?.opensAt)} />
+              <Input label="Pengajuan proposal ditutup" name="closesAt" type="datetime-local" required defaultValue={dateForInput(editingPeriod?.closesAt)} />
+              {program === "community" ? <>
+                <Input label="Bulan review" name="reviewMonth" type="month" defaultValue={editingPeriod?.reviewStart?.slice(0, 7) ?? ""} />
+                <Input label="Bulan mulai pelaksanaan" name="executionMonth" type="month" defaultValue={editingPeriod?.executionStart?.slice(0, 7) ?? ""} />
+                <Input label="Bulan laporan akhir" name="finalReportMonth" type="month" defaultValue={editingPeriod?.finalReportDate?.slice(0, 7) ?? ""} />
+              </> : <>
+                <Input label="Mulai review" name="reviewStart" type="date" defaultValue={editingPeriod?.reviewStart ?? ""} />
+                <Input label="Selesai review" name="reviewEnd" type="date" defaultValue={editingPeriod?.reviewEnd ?? ""} />
+                <Input label="Mulai pelaksanaan" name="executionStart" type="date" defaultValue={editingPeriod?.executionStart ?? ""} />
+                <Input label="Laporan kemajuan 75%" name="progressReportDate" type="date" defaultValue={editingPeriod?.progressReportDate ?? ""} />
+                <Input label="Laporan akhir" name="finalReportDate" type="date" defaultValue={editingPeriod?.finalReportDate ?? ""} />
+              </>}
+            </fieldset>
             <label className="flex items-center gap-2"><input type="checkbox" name="allowDailyJournal" defaultChecked={editingPeriod?.allowDailyJournal} /> Aktifkan Catatan Harian</label>
             {program === "research" && <label className="flex items-center gap-2"><input type="checkbox" name="allowProgressReport" defaultChecked={editingPeriod?.allowProgressReport} /> Aktifkan Laporan Kemajuan</label>}
             <label className="flex items-center gap-2"><input type="checkbox" name="allowFinalReport" defaultChecked={editingPeriod?.allowFinalReport} /> Aktifkan Laporan Akhir</label>
@@ -359,9 +372,15 @@ export function GrantPanel() {
           </div>
         </CardHeader>
         <CardContent className="space-y-2">
-          <p className="text-sm">{localDate.format(new Date(selected.opensAt))} – {localDate.format(new Date(selected.closesAt))} WIB</p>
+          {program === "research" && <p className="text-sm">{localDate.format(new Date(selected.opensAt))} – {localDate.format(new Date(selected.closesAt))} WIB</p>}
           <p className="text-xs text-muted-foreground">{selected.code} · Usulan {selected.proposalYear} · Pelaksanaan {selected.projectYear} · Anggaran {selected.budgetYear}</p>
-          {(selected.reviewStart || selected.executionStart || selected.progressReportDate || selected.finalReportDate) && (
+          {program === "community" ? <dl className="grid gap-2 text-sm sm:grid-cols-2 xl:grid-cols-4">
+            {[["Pengajuan Proposal", `${localDate.format(new Date(selected.opensAt))} – ${localDate.format(new Date(selected.closesAt))} WIB`],
+              ["Review", formatGrantMonth(selected.reviewStart)], ["Pelaksanaan", formatGrantMonth(selected.executionStart)],
+              ["Laporan Akhir", formatGrantMonth(selected.finalReportDate)]].map(([label, value]) => <div className="rounded-md border border-border p-2" key={label}>
+              <dt className="text-xs text-muted-foreground">{label}</dt><dd className="font-medium">{value}</dd>
+            </div>)}
+          </dl> : (selected.reviewStart || selected.executionStart || selected.progressReportDate || selected.finalReportDate) && (
             <p className="text-xs text-muted-foreground">
               Timeline: Review {selected.reviewStart || "-"} s.d. {selected.reviewEnd || "-"} · Pelaksanaan {selected.executionStart || "-"}{program === "research" && ` · Lap. Kemajuan 75% ${selected.progressReportDate || "-"}`} · Lap. Akhir {selected.finalReportDate || "-"}
             </p>

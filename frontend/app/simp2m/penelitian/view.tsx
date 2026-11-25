@@ -600,6 +600,7 @@ export function ResearchPanel() {
         proposal={{ ...proposal, title: draft.title, fieldId: draft.fieldId, data: draft.data }}
         institutionName={institutions.find(i => i.id === tenant)?.name ?? "Universitas Anwar Medika"}
         options={options}
+        imageEndpoint={`${endpoint}/${proposal.id}/images`}
         onClose={() => setPrintMode(null)}
       />}
     </section>

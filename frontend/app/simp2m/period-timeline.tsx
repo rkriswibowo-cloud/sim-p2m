@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { CalendarDays, CheckCircle2, Clock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatGrantMonth, grantMonthBounds } from "./grant-schedule";
 
 interface TimelinePeriod {
   id: number;
@@ -57,16 +58,18 @@ function parseDayEnd(dateStr?: string): number | null {
   return new Date(dateStr.includes("T") ? dateStr : `${dateStr}T23:59:59+07:00`).getTime();
 }
 
-function buildStages(period: TimelinePeriod, nowMs: number): TimelineStage[] {
+function buildStages(period: TimelinePeriod, nowMs: number, community: boolean): TimelineStage[] {
   const propStart = parseDayStart(period.opensAt)!;
   const propEnd = parseDayEnd(period.closesAt)!;
-  const revStart = parseDayStart(period.reviewStart);
-  const revEnd = parseDayEnd(period.reviewEnd) ?? (revStart ? parseDayEnd(period.reviewStart) : null);
-  const execStart = parseDayStart(period.executionStart);
+  const reviewMonth = grantMonthBounds(period.reviewStart.slice(0, 7));
+  const finalMonth = grantMonthBounds(period.finalReportDate.slice(0, 7));
+  const revStart = parseDayStart(community ? reviewMonth.first : period.reviewStart);
+  const revEnd = parseDayEnd(community ? reviewMonth.last : (period.reviewEnd || period.reviewStart));
+  const execStart = parseDayStart(community ? grantMonthBounds(period.executionStart.slice(0, 7)).first : period.executionStart);
   const progStart = parseDayStart(period.progressReportDate);
   const progEnd = parseDayEnd(period.progressReportDate);
-  const finalStart = parseDayStart(period.finalReportDate);
-  const finalEnd = parseDayEnd(period.finalReportDate);
+  const finalStart = parseDayStart(community ? finalMonth.first : period.finalReportDate);
+  const finalEnd = parseDayEnd(community ? finalMonth.last : period.finalReportDate);
 
   const evalRange = (start: number | null, end: number | null): StageStatus => {
     if (start === null) return "unscheduled";
@@ -78,12 +81,13 @@ function buildStages(period: TimelinePeriod, nowMs: number): TimelineStage[] {
 
   const evalExecution = (): StageStatus => {
     if (execStart === null) return "unscheduled";
-    if (progStart !== null && nowMs >= progStart) return "done";
+    const nextStage = community ? finalStart : progStart;
+    if (nextStage !== null && nowMs >= nextStage && nowMs >= execStart) return "done";
     if (nowMs >= execStart) return "active";
     return "upcoming";
   };
 
-  return [
+  const stages: TimelineStage[] = [
     {
       key: "proposal",
       label: "Pengajuan Proposal",
@@ -93,13 +97,13 @@ function buildStages(period: TimelinePeriod, nowMs: number): TimelineStage[] {
     {
       key: "review",
       label: "Review",
-      dateText: formatRange(period.reviewStart, period.reviewEnd),
+      dateText: community ? formatGrantMonth(period.reviewStart) : formatRange(period.reviewStart, period.reviewEnd),
       status: evalRange(revStart, revEnd),
     },
     {
       key: "execution",
       label: "Pelaksanaan",
-      dateText: formatRange(period.executionStart),
+      dateText: community ? formatGrantMonth(period.executionStart) : formatRange(period.executionStart),
       status: evalExecution(),
     },
     {
@@ -111,10 +115,11 @@ function buildStages(period: TimelinePeriod, nowMs: number): TimelineStage[] {
     {
       key: "final",
       label: "Laporan Akhir",
-      dateText: formatRange(period.finalReportDate),
+      dateText: community ? formatGrantMonth(period.finalReportDate) : formatRange(period.finalReportDate),
       status: evalRange(finalStart, finalEnd),
     },
   ];
+  return community ? stages.filter(stage => stage.key !== "progress") : stages;
 }
 
 const statusLabel: Record<StageStatus, string> = {
@@ -124,7 +129,9 @@ const statusLabel: Record<StageStatus, string> = {
   unscheduled: "Belum Dijadwalkan",
 };
 
-export function PeriodTimelineWidget({ institutionId }: { institutionId: number }) {
+export function PeriodTimelineWidget({ institutionId, program = "research" }: { institutionId: number; program?: "research" | "community" }) {
+  const community = program === "community";
+  const title = community ? "Timeline Pengabdian kepada Masyarakat" : "Timeline Penelitian";
   const [periods, setPeriods] = useState<TimelinePeriod[]>([]);
   const [selectedId, setSelectedId] = useState<number>(0);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
@@ -133,7 +140,7 @@ export function PeriodTimelineWidget({ institutionId }: { institutionId: number 
   useEffect(() => {
     if (!institutionId) return;
     let cancelled = false;
-    fetch(`/api/v1/iam/institutions/${institutionId}/grants/timeline`, { cache: "no-store" })
+    fetch(`/api/v1/iam/institutions/${institutionId}/grants/timeline?program=${program}`, { cache: "no-store" })
       .then(res => (res.ok ? res.json() : { periods: [] }))
       .then((data: { periods?: TimelinePeriod[]; serverNow?: string }) => {
         if (cancelled) return;
@@ -153,7 +160,7 @@ export function PeriodTimelineWidget({ institutionId }: { institutionId: number 
     return () => {
       cancelled = true;
     };
-  }, [institutionId]);
+  }, [institutionId, program]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNowMs(Date.now()), 60000);
@@ -163,7 +170,7 @@ export function PeriodTimelineWidget({ institutionId }: { institutionId: number 
   if (!institutionId || loading || periods.length === 0) return null;
 
   const activePeriod = periods.find(p => p.id === selectedId) ?? periods[0];
-  const stages = buildStages(activePeriod, nowMs);
+  const stages = buildStages(activePeriod, nowMs, community);
   const completedCount = stages.filter(s => s.status === "done").length;
   const activeCount = stages.filter(s => s.status === "active").length;
   const progressPercent = Math.round(((completedCount + activeCount * 0.5) / stages.length) * 100);
@@ -175,12 +182,12 @@ export function PeriodTimelineWidget({ institutionId }: { institutionId: number 
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <CalendarDays size={18} className="text-brand" aria-hidden="true" />
-            <CardTitle className="text-base">Timeline Periode Usulan (Realtime)</CardTitle>
+            <CardTitle className="text-base">{title}</CardTitle>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {periods.length > 1 && (
               <select
-                aria-label="Pilih periode timeline"
+                aria-label={`Pilih periode ${title}`}
                 value={activePeriod.id}
                 onChange={e => setSelectedId(Number(e.target.value))}
                 className="rounded-md border border-input bg-background px-2 py-1 text-xs"
@@ -193,7 +200,7 @@ export function PeriodTimelineWidget({ institutionId }: { institutionId: number 
               </select>
             )}
             <span className="rounded bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-[color:var(--brand)]">
-              {currentStage ? `Tahap saat ini: ${currentStage.label}` : "Seluruh tahapan selesai"} · {progressPercent}%
+              {currentStage ? `Tahap saat ini: ${currentStage.label}` : completedCount === stages.length ? "Seluruh tahapan selesai" : "Jadwal belum lengkap"} · {progressPercent}%
             </span>
           </div>
         </div>
@@ -208,7 +215,7 @@ export function PeriodTimelineWidget({ institutionId }: { institutionId: number 
         </div>
       </CardHeader>
       <CardContent>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+        <div className={`grid gap-2 sm:grid-cols-2 ${community ? "lg:grid-cols-4" : "lg:grid-cols-5"}`}>
           {stages.map((stage, idx) => {
             const isDone = stage.status === "done";
             const isActive = stage.status === "active";

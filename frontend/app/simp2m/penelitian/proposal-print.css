@@ -1,0 +1,43 @@
+@page simp2m-proposal {
+  size: A4;
+  margin: 25mm;
+}
+
+@media print {
+  body:has(> .proposal-print-overlay) > :not(.proposal-print-overlay) {
+    display: none !important;
+  }
+  body:has(> .proposal-print-overlay) {
+    display: block !important;
+    margin: 0 !important;
+    background: white !important;
+  }
+  .proposal-print-overlay,
+  .proposal-print-overlay .proposal-print-frame,
+  .proposal-print-overlay .proposal-print-document {
+    display: block !important;
+    position: static !important;
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+    width: auto !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    background: white !important;
+    color: #111 !important;
+    border-radius: 0 !important;
+  }
+  .proposal-print-document { page: simp2m-proposal; }
+  .proposal-print-document .proposal-print-page-start {
+    break-before: page;
+    margin-block-start: 0;
+  }
+  .proposal-print-document .proposal-print-cover { padding-block-start: 35mm; }
+  .proposal-print-document h1, .proposal-print-document h2, .proposal-print-document h3 { break-after: avoid; }
+  .proposal-print-document tr, .proposal-print-document figure, .proposal-print-signatures { break-inside: avoid; }
+  .proposal-print-document thead { display: table-header-group; }
+  .proposal-print-document p { orphans: 3; widows: 3; }
+}

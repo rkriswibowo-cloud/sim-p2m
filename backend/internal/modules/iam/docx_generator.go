@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"image"
 	"math/big"
 	"mime"
 	"net/http"
@@ -138,8 +139,8 @@ func docxParagraph(text string, bold bool, sizeHalfPt int, align string, spaceAf
 	if sizeHalfPt == 0 {
 		sizeHalfPt = 22 // 11pt
 	}
-	return fmt.Sprintf(`<w:p><w:pPr>%s<w:spacing w:after="%d" w:line="276" w:lineRule="auto"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Tahoma" w:hAnsi="Tahoma" w:cs="Tahoma"/>%s<w:sz w:val="%d"/><w:szCs w:val="%d"/></w:rPr><w:t xml:space="preserve">%s</w:t></w:r></w:p>`,
-		jc, spaceAfter, bTag, sizeHalfPt, sizeHalfPt, xmlEsc(text))
+	return fmt.Sprintf(`<w:p><w:pPr><w:spacing w:after="%d" w:line="276" w:lineRule="auto"/>%s</w:pPr><w:r><w:rPr><w:rFonts w:ascii="Tahoma" w:hAnsi="Tahoma" w:cs="Tahoma"/>%s<w:sz w:val="%d"/><w:szCs w:val="%d"/></w:rPr><w:t xml:space="preserve">%s</w:t></w:r></w:p>`,
+		spaceAfter, jc, bTag, sizeHalfPt, sizeHalfPt, xmlEsc(text))
 }
 
 func docxRichParagraphs(rawHTML string) string {
@@ -164,8 +165,12 @@ func docxRichParagraphs(rawHTML string) string {
 	return b.String()
 }
 
-func docxPageBreak() string {
-	return `<w:p><w:r><w:br w:type="page"/></w:r></w:p>`
+func docxHeading(text, align string, pageStart bool) string {
+	controls := `<w:keepNext/>`
+	if pageStart {
+		controls += `<w:pageBreakBefore/>`
+	}
+	return strings.Replace(docxParagraph(text, true, 24, align, 140), "<w:pPr>", "<w:pPr>"+controls, 1)
 }
 
 func docxTable(headers []string, rows [][]string, colWidths []int) string {
@@ -174,9 +179,17 @@ func docxTable(headers []string, rows [][]string, colWidths []int) string {
 	for _, side := range []string{"top", "left", "bottom", "right", "insideH", "insideV"} {
 		b.WriteString(fmt.Sprintf(`<w:%s w:val="single" w:sz="4" w:space="0" w:color="333333"/>`, side))
 	}
-	b.WriteString(`</w:tblBorders></w:tblPr>`)
+	b.WriteString(`</w:tblBorders></w:tblPr><w:tblGrid>`)
+	for _, width := range colWidths {
+		fmt.Fprintf(&b, `<w:gridCol w:w="%d"/>`, width)
+	}
+	b.WriteString(`</w:tblGrid>`)
 	writeRow := func(cells []string, isHeader bool) {
-		b.WriteString(`<w:tr>`)
+		b.WriteString(`<w:tr><w:trPr><w:cantSplit/>`)
+		if isHeader {
+			b.WriteString(`<w:tblHeader/>`)
+		}
+		b.WriteString(`</w:trPr>`)
 		for i, cell := range cells {
 			w := 1800
 			if i < len(colWidths) {
@@ -200,7 +213,60 @@ func docxTable(headers []string, rows [][]string, colWidths []int) string {
 	return b.String()
 }
 
-func buildDocxBytes(bodyXML string) ([]byte, error) {
+type docxDiagram struct {
+	Index         int
+	Label         string
+	Extension     string
+	Content       []byte
+	Width, Height int
+}
+
+func (d docxDiagram) drawing() string {
+	name := html.EscapeString(d.Label)
+	return fmt.Sprintf(`<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:drawing>
+ <wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">
+ <wp:extent cx="%d" cy="%d"/><wp:docPr id="%d" name="%s"/>
+ <a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+ <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
+ <pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+ <pic:nvPicPr><pic:cNvPr id="0" name="%s"/><pic:cNvPicPr/></pic:nvPicPr>
+ <pic:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rIdImage%d"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>
+ <pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="%d" cy="%d"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>
+ </pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`,
+		d.Width, d.Height, d.Index, name, name, d.Index, d.Width, d.Height) + docxParagraph(d.Label, false, 20, "center", 150)
+}
+
+func (s service) proposalDocxDiagrams(ctx context.Context, proposalID int64) (map[string]docxDiagram, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT kind,content FROM research_proposal_images WHERE proposal_id=? AND kind IN ('roadmap','method') ORDER BY kind`, proposalID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make(map[string]docxDiagram)
+	for rows.Next() {
+		var kind string
+		var content []byte
+		if err := rows.Scan(&kind, &content); err != nil {
+			return nil, err
+		}
+		cfg, format, err := image.DecodeConfig(bytes.NewReader(content))
+		if err != nil || cfg.Width < 1 || cfg.Height < 1 || (format != "jpeg" && format != "png") {
+			continue
+		}
+		width, height := 5400000, 5400000*int64(cfg.Height)/int64(cfg.Width)
+		if height > 4200000 {
+			width, height = int(4200000*int64(cfg.Width)/int64(cfg.Height)), 4200000
+		}
+		label := "Diagram metode penelitian"
+		if kind == "roadmap" {
+			label = "Diagram peta jalan penelitian"
+		}
+		items[kind] = docxDiagram{Index: len(items) + 1, Label: label, Extension: format, Content: content, Width: max(1, width), Height: max(1, int(height))}
+	}
+	return items, rows.Err()
+}
+
+func buildDocxBytes(bodyXML string, diagrams ...docxDiagram) ([]byte, error) {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 
@@ -209,6 +275,8 @@ func buildDocxBytes(bodyXML string) ([]byte, error) {
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
  <Default Extension="xml" ContentType="application/xml"/>
+ <Default Extension="jpeg" ContentType="image/jpeg"/>
+ <Default Extension="png" ContentType="image/png"/>
  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
 </Types>`,
 		"_rels/.rels": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -220,6 +288,16 @@ func buildDocxBytes(bodyXML string) ([]byte, error) {
  <w:body>` + bodyXML + `<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1418" w:right="1418" w:bottom="1418" w:left="1418"/></w:sectPr>
  </w:body>
 </w:document>`,
+	}
+	if len(diagrams) > 0 {
+		var rels strings.Builder
+		rels.WriteString(`<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`)
+		for _, diagram := range diagrams {
+			path := fmt.Sprintf("media/diagram%d.%s", diagram.Index, diagram.Extension)
+			fmt.Fprintf(&rels, `<Relationship Id="rIdImage%d" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="%s"/>`, diagram.Index, path)
+			files["word/"+path] = string(diagram.Content)
+		}
+		files["word/_rels/document.xml.rels"] = rels.String() + "</Relationships>"
 	}
 
 	for name, content := range files {
@@ -288,10 +366,17 @@ func (s service) exportProposalDocx(c *gin.Context, a actor) {
 	}
 	p := meta.Proposal
 	d := p.Data
+	diagrams, err := s.proposalDocxDiagrams(c.Request.Context(), p.ID)
+	if err != nil {
+		c.Status(503)
+		return
+	}
+	embedded := []docxDiagram{}
 
 	var body strings.Builder
 	// Cover
-	body.WriteString(docxParagraph("USULAN PENELITIAN", true, 32, "center", 160))
+	body.WriteString(docxParagraph("", false, 22, "center", 1700))
+	body.WriteString(docxParagraph("PROPOSAL PENELITIAN", true, 34, "center", 160))
 	body.WriteString(docxParagraph(strings.ToUpper(p.Scheme), true, 26, "center", 480))
 	body.WriteString(docxParagraph(p.Title, true, 28, "center", 720))
 	body.WriteString(docxParagraph("TIM PENGUSUL", true, 22, "center", 160))
@@ -310,10 +395,21 @@ func (s service) exportProposalDocx(c *gin.Context, a actor) {
 	body.WriteString(docxParagraph("", false, 22, "center", 720))
 	body.WriteString(docxParagraph(strings.ToUpper(meta.InstitutionName), true, 24, "center", 100))
 	body.WriteString(docxParagraph(fmt.Sprintf("TAHUN %d", meta.FiscalYear), true, 24, "center", 200))
-	body.WriteString(docxPageBreak())
+
+	body.WriteString(docxHeading("HALAMAN PENGESAHAN", "center", true))
+	approvalRows := [][]string{{"Judul Penelitian", p.Title}, {"Ketua Peneliti", ownerLabel}, {"Program Studi", meta.OwnerUnit}}
+	for i, member := range d.Team {
+		name := fmt.Sprintf("Dosen #%d", member.ID)
+		if info, ok := meta.Lecturers[member.ID]; ok {
+			name = info.Name
+		}
+		approvalRows = append(approvalRows, []string{fmt.Sprintf("Anggota Peneliti %d", i+1), name})
+	}
+	body.WriteString(docxTable([]string{"Identitas", "Keterangan"}, approvalRows, []int{3000, 6000}))
+	body.WriteString(docxTable([]string{"Mengetahui, Kepala LPPM", "Ketua Peneliti"}, [][]string{{"", ""}, {"(........................................)", p.Owner}}, []int{4500, 4500}))
 
 	// Identitas
-	body.WriteString(docxParagraph("IDENTITAS DAN URAIAN UMUM", true, 24, "left", 180))
+	body.WriteString(docxHeading("IDENTITAS DAN URAIAN UMUM", "left", true))
 	identRows := [][]string{
 		{"Judul Penelitian", p.Title},
 		{"Skema / Periode", p.Scheme + " (" + p.Period + ")"},
@@ -328,27 +424,34 @@ func (s service) exportProposalDocx(c *gin.Context, a actor) {
 	}
 	body.WriteString(docxTable([]string{"Komponen", "Keterangan"}, identRows, []int{3000, 6000}))
 
-	// Ringkasan & Narasi
-	body.WriteString(docxParagraph("RINGKASAN", true, 24, "left", 140))
+	body.WriteString(docxHeading("A. PETA JALAN PENELITIAN", "left", false))
+	body.WriteString(docxRichParagraphs(d.Roadmap))
+	if diagram, ok := diagrams["roadmap"]; ok {
+		body.WriteString(diagram.drawing())
+		embedded = append(embedded, diagram)
+	}
+	body.WriteString(docxHeading("B. RINGKASAN", "left", false))
 	body.WriteString(docxRichParagraphs(d.Summary))
-	body.WriteString(docxParagraph("Kata Kunci: "+strings.Join(d.Keywords, ", "), true, 22, "left", 80))
+	body.WriteString(docxHeading("C. KATA KUNCI", "left", false))
+	body.WriteString(docxParagraph(strings.Join(d.Keywords, ", "), false, 22, "left", 80))
 	if d.SDGKeywords != "" {
 		body.WriteString(docxParagraph("Kata Kunci SDGs: "+d.SDGKeywords, false, 22, "left", 160))
 	}
 
-	body.WriteString(docxParagraph("A. PENDAHULUAN", true, 24, "left", 140))
+	body.WriteString(docxHeading("D. PENDAHULUAN", "left", false))
 	body.WriteString(docxRichParagraphs(d.Introduction))
 
-	body.WriteString(docxParagraph("B. TINJAUAN PUSTAKA", true, 24, "left", 140))
+	body.WriteString(docxHeading("E. TINJAUAN PUSTAKA", "left", false))
 	body.WriteString(docxRichParagraphs(d.Literature))
 
-	body.WriteString(docxParagraph("C. ROADMAP PENELITIAN", true, 24, "left", 140))
-	body.WriteString(docxRichParagraphs(d.Roadmap))
-
-	body.WriteString(docxParagraph("D. METODE PENELITIAN", true, 24, "left", 140))
+	body.WriteString(docxHeading("F. METODE", "left", false))
 	body.WriteString(docxRichParagraphs(d.Method))
+	if diagram, ok := diagrams["method"]; ok {
+		body.WriteString(diagram.drawing())
+		embedded = append(embedded, diagram)
+	}
 
-	body.WriteString(docxParagraph("E. HASIL YANG DIHARAPKAN & TARGET LUARAN", true, 24, "left", 140))
+	body.WriteString(docxHeading("G. HASIL YANG DIHARAPKAN", "left", false))
 	body.WriteString(docxRichParagraphs(d.Expected))
 	if len(d.Outputs) > 0 {
 		outRows := [][]string{}
@@ -358,7 +461,7 @@ func (s service) exportProposalDocx(c *gin.Context, a actor) {
 		body.WriteString(docxTable([]string{"No", "Jenis Luaran", "Status Target", "Tahun"}, outRows, []int{800, 4200, 2600, 1400}))
 	}
 
-	body.WriteString(docxParagraph("F. RENCANA ANGGARAN BIAYA (RAB)", true, 24, "left", 140))
+	body.WriteString(docxHeading("H. ANGGARAN BIAYA", "left", false))
 	if len(d.Costs) > 0 {
 		costRows := [][]string{}
 		for _, cost := range d.Costs {
@@ -374,7 +477,7 @@ func (s service) exportProposalDocx(c *gin.Context, a actor) {
 		body.WriteString(docxTable([]string{"Kategori", "Item & Justifikasi", "Volume", "Harga Satuan", "Subtotal"}, costRows, []int{1700, 3100, 1200, 1500, 1500}))
 	}
 
-	body.WriteString(docxParagraph("G. JADWAL KEGIATAN", true, 24, "left", 140))
+	body.WriteString(docxHeading("I. JADWAL PELAKSANAAN", "left", false))
 	if len(d.Schedule) > 0 {
 		schRows := [][]string{}
 		for i, sch := range d.Schedule {
@@ -389,10 +492,10 @@ func (s service) exportProposalDocx(c *gin.Context, a actor) {
 		body.WriteString(docxTable([]string{"No", "Tahapan", "Luaran", "Penanggung Jawab", "Waktu"}, schRows, []int{700, 2600, 2200, 2000, 1500}))
 	}
 
-	body.WriteString(docxParagraph("H. DAFTAR PUSTAKA", true, 24, "left", 140))
+	body.WriteString(docxHeading("J. DAFTAR PUSTAKA", "left", false))
 	body.WriteString(docxRichParagraphs(d.References))
 
-	rawDocx, err := buildDocxBytes(body.String())
+	rawDocx, err := buildDocxBytes(body.String(), embedded...)
 	if err != nil {
 		c.Status(500)
 		return
@@ -499,4 +602,3 @@ func emptyDash(s string) string {
 // Keep unused imports guard if any
 var _ = json.Marshal
 var _ = html.EscapeString
-

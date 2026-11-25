@@ -122,6 +122,11 @@ func (s service) grantOverview(c *gin.Context, a actor) {
 
 func (s service) grantTimeline(c *gin.Context, a actor) {
 	ctx := c.Request.Context()
+	program := c.DefaultQuery("program", "research")
+	if program != "research" && program != "community" {
+		c.Status(400)
+		return
+	}
 	rows, err := s.db.QueryContext(ctx, `SELECT id,code,name,proposal_year,project_year,budget_year,opens_at,closes_at,
   COALESCE(DATE_FORMAT(review_start,'%Y-%m-%d'),''),
   COALESCE(DATE_FORMAT(review_end,'%Y-%m-%d'),''),
@@ -130,8 +135,8 @@ func (s service) grantTimeline(c *gin.Context, a actor) {
   COALESCE(DATE_FORMAT(final_report_date,'%Y-%m-%d'),''),
   allow_daily_journal, allow_progress_report, allow_final_report,
   CASE WHEN UTC_TIMESTAMP()<opens_at THEN 'scheduled' WHEN UTC_TIMESTAMP()>=closes_at THEN 'closed' ELSE 'open' END
-  FROM grant_periods WHERE institution_id=? AND program='research'
-  ORDER BY (UTC_TIMESTAMP() BETWEEN opens_at AND closes_at) DESC, opens_at DESC, id DESC LIMIT 5`, a.tenant)
+  FROM grant_periods WHERE institution_id=? AND program=?
+  ORDER BY (UTC_TIMESTAMP() BETWEEN opens_at AND closes_at) DESC, opens_at DESC, id DESC LIMIT 5`, a.tenant, program)
 	if err != nil {
 		c.Status(503)
 		return
