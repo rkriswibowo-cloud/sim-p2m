@@ -35,6 +35,8 @@
   color-scheme: light;
 }
 .workspace-shell :focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
+.workspace-timeline-date { color: #fde68a; }
+.workspace-shell[data-mode="light"] .workspace-timeline-date { color: #713f12; }
 .workspace-skip { position: fixed; z-index: 60; top: .5rem; left: .5rem; translate: 0 -150%; padding: .6rem 1rem; background: var(--card); border-radius: .5rem; }
 .workspace-skip:focus { translate: 0; }
 .workspace-topbar { position: sticky; top: 0; z-index: 30; min-height: var(--workspace-top-height); display: flex; align-items: center; gap: .65rem; padding: .35rem .85rem; background: var(--workspace-top); border-bottom: 1px solid var(--border); }

@@ -19,17 +19,18 @@ const grantManage = "grants.manage"
 var publishedPeriod = errors.New("grant period already published")
 
 type grantPeriod struct {
-	ID                 int64     `json:"id"`
-	Code               string    `json:"code"`
-	Name               string    `json:"name"`
-	ProposalYear       int       `json:"proposalYear"`
-	ProjectYear        int       `json:"projectYear"`
-	BudgetYear         int       `json:"budgetYear"`
-	OpensAt            time.Time `json:"opensAt"`
-	ClosesAt           time.Time `json:"closesAt"`
-	ReviewStart        string    `json:"reviewStart"`
-	ReviewEnd          string    `json:"reviewEnd"`
-	ExecutionStart     string    `json:"executionStart"`
+	Program             string    `json:"program"`
+	ID                  int64     `json:"id"`
+	Code                string    `json:"code"`
+	Name                string    `json:"name"`
+	ProposalYear        int       `json:"proposalYear"`
+	ProjectYear         int       `json:"projectYear"`
+	BudgetYear          int       `json:"budgetYear"`
+	OpensAt             time.Time `json:"opensAt"`
+	ClosesAt            time.Time `json:"closesAt"`
+	ReviewStart         string    `json:"reviewStart"`
+	ReviewEnd           string    `json:"reviewEnd"`
+	ExecutionStart      string    `json:"executionStart"`
 	ProgressReportDate  string    `json:"progressReportDate"`
 	FinalReportDate     string    `json:"finalReportDate"`
 	AllowDailyJournal   bool      `json:"allowDailyJournal"`
@@ -68,7 +69,7 @@ type grantChoice struct {
 
 func (s service) grantOptions(c *gin.Context, a actor) {
 	ctx := c.Request.Context()
-	schemes, err := s.grantChoices(ctx, a.tenant, "SELECT id,name FROM schemes WHERE institution_id=? AND is_active ORDER BY name")
+	schemes, err := s.grantChoices(ctx, a.tenant, "SELECT id,name FROM schemes WHERE institution_id=? AND program='research' AND is_active ORDER BY name")
 	if err != nil {
 		c.Status(503)
 		return
@@ -78,7 +79,12 @@ func (s service) grantOptions(c *gin.Context, a actor) {
 		c.Status(503)
 		return
 	}
-	c.JSON(200, gin.H{"schemes": schemes, "sources": sources})
+	communitySchemes, err := s.grantChoices(ctx, a.tenant, "SELECT id,name FROM schemes WHERE institution_id=? AND program='community' AND is_active ORDER BY name")
+	if err != nil {
+		c.Status(503)
+		return
+	}
+	c.JSON(200, gin.H{"schemes": schemes, "communitySchemes": communitySchemes, "sources": sources})
 }
 
 func (s service) grantChoices(ctx context.Context, tenant int64, query string) ([]grantChoice, error) {
@@ -101,12 +107,12 @@ func (s service) grantChoices(ctx context.Context, tenant int64, query string) (
 func (s service) grantOverview(c *gin.Context, a actor) {
 	ctx := c.Request.Context()
 	administrator := s.mayManageGrants(ctx, a)
-	periods, err := s.grantPeriods(ctx, a.tenant, administrator)
+	periods, err := s.grantPeriods(ctx, a.tenant, administrator, "")
 	if err != nil {
 		c.Status(503)
 		return
 	}
-	versions, err := s.grantVersions(ctx, a.tenant, administrator)
+	versions, err := s.grantVersions(ctx, a.tenant, administrator, "")
 	if err != nil {
 		c.Status(503)
 		return
@@ -124,7 +130,7 @@ func (s service) grantTimeline(c *gin.Context, a actor) {
   COALESCE(DATE_FORMAT(final_report_date,'%Y-%m-%d'),''),
   allow_daily_journal, allow_progress_report, allow_final_report,
   CASE WHEN UTC_TIMESTAMP()<opens_at THEN 'scheduled' WHEN UTC_TIMESTAMP()>=closes_at THEN 'closed' ELSE 'open' END
-  FROM grant_periods WHERE institution_id=?
+  FROM grant_periods WHERE institution_id=? AND program='research'
   ORDER BY (UTC_TIMESTAMP() BETWEEN opens_at AND closes_at) DESC, opens_at DESC, id DESC LIMIT 5`, a.tenant)
 	if err != nil {
 		c.Status(503)
@@ -149,8 +155,8 @@ func (s service) grantTimeline(c *gin.Context, a actor) {
 	c.JSON(200, gin.H{"periods": items, "serverNow": time.Now().UTC()})
 }
 
-func (s service) grantPeriods(ctx context.Context, tenant int64, all bool) ([]grantPeriod, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,code,name,proposal_year,project_year,budget_year,opens_at,closes_at,
+func (s service) grantPeriods(ctx context.Context, tenant int64, all bool, program string) ([]grantPeriod, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id,code,name,proposal_year,project_year,budget_year,opens_at,closes_at,program,
   COALESCE(DATE_FORMAT(review_start,'%Y-%m-%d'),''),
   COALESCE(DATE_FORMAT(review_end,'%Y-%m-%d'),''),
   COALESCE(DATE_FORMAT(execution_start,'%Y-%m-%d'),''),
@@ -158,9 +164,9 @@ func (s service) grantPeriods(ctx context.Context, tenant int64, all bool) ([]gr
   COALESCE(DATE_FORMAT(final_report_date,'%Y-%m-%d'),''),
   allow_daily_journal, allow_progress_report, allow_final_report,
   CASE WHEN UTC_TIMESTAMP()<opens_at THEN 'scheduled' WHEN UTC_TIMESTAMP()>=closes_at THEN 'closed' ELSE 'open' END
-  FROM grant_periods WHERE institution_id=? AND (? OR (opens_at<=UTC_TIMESTAMP() AND closes_at>UTC_TIMESTAMP()
+  FROM grant_periods WHERE institution_id=? AND (?='' OR program=?) AND (? OR (opens_at<=UTC_TIMESTAMP() AND closes_at>UTC_TIMESTAMP()
    AND EXISTS (SELECT 1 FROM grant_scheme_versions v WHERE v.institution_id=grant_periods.institution_id AND v.period_id=grant_periods.id)))
-  ORDER BY opens_at DESC,id DESC`, tenant, all)
+  ORDER BY opens_at DESC,id DESC`, tenant, program, program, all)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +174,7 @@ func (s service) grantPeriods(ctx context.Context, tenant int64, all bool) ([]gr
 	items := []grantPeriod{}
 	for rows.Next() {
 		var row grantPeriod
-		if err := rows.Scan(&row.ID, &row.Code, &row.Name, &row.ProposalYear, &row.ProjectYear, &row.BudgetYear, &row.OpensAt, &row.ClosesAt,
+		if err := rows.Scan(&row.ID, &row.Code, &row.Name, &row.ProposalYear, &row.ProjectYear, &row.BudgetYear, &row.OpensAt, &row.ClosesAt, &row.Program,
 			&row.ReviewStart, &row.ReviewEnd, &row.ExecutionStart, &row.ProgressReportDate, &row.FinalReportDate,
 			&row.AllowDailyJournal, &row.AllowProgressReport, &row.AllowFinalReport, &row.State); err != nil {
 			return nil, err
@@ -178,13 +184,13 @@ func (s service) grantPeriods(ctx context.Context, tenant int64, all bool) ([]gr
 	return items, rows.Err()
 }
 
-func (s service) grantVersions(ctx context.Context, tenant int64, all bool) ([]grantVersion, error) {
+func (s service) grantVersions(ctx context.Context, tenant int64, all bool, program string) ([]grantVersion, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT v.id,v.period_id,v.scheme_id,v.funding_source_id,v.version_no,v.scheme_name,v.source_name,
   CAST(v.budget_idr AS CHAR),v.quota,v.duration_months,v.active_lecturer,v.require_nuptk,v.min_jafung,v.manual_requirements,v.published_at
   FROM grant_scheme_versions v JOIN grant_periods p ON p.id=v.period_id AND p.institution_id=v.institution_id
-  WHERE v.institution_id=? AND (? OR (p.opens_at<=UTC_TIMESTAMP() AND p.closes_at>UTC_TIMESTAMP()
+  WHERE v.institution_id=? AND (?='' OR p.program=?) AND (? OR (p.opens_at<=UTC_TIMESTAMP() AND p.closes_at>UTC_TIMESTAMP()
    AND v.version_no=(SELECT MAX(x.version_no) FROM grant_scheme_versions x WHERE x.institution_id=v.institution_id AND x.period_id=v.period_id AND x.scheme_id=v.scheme_id)))
-  ORDER BY v.period_id DESC,v.scheme_id,v.version_no DESC`, tenant, all)
+  ORDER BY v.period_id DESC,v.scheme_id,v.version_no DESC`, tenant, program, program, all)
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +219,7 @@ func parseOptionalDate(raw string) (sql.NullString, bool) {
 
 func (s service) saveGrantPeriod(c *gin.Context, a actor) {
 	var input struct {
-		Code, Name                            string
+		Code, Name, Program                   string
 		ProposalYear, ProjectYear, BudgetYear int
 		OpensAt, ClosesAt                     time.Time
 		ReviewStart, ReviewEnd                string
@@ -229,6 +235,10 @@ func (s service) saveGrantPeriod(c *gin.Context, a actor) {
 	}
 	input.Code = strings.ToUpper(strings.TrimSpace(input.Code))
 	input.Name = strings.TrimSpace(input.Name)
+	if input.Program != "" && input.Program != "research" && input.Program != "community" {
+		c.Status(400)
+		return
+	}
 	validYear := func(year int) bool { return year >= 2000 && year <= 2200 }
 	revStart, ok1 := parseOptionalDate(input.ReviewStart)
 	revEnd, ok2 := parseOptionalDate(input.ReviewEnd)
@@ -253,9 +263,12 @@ func (s service) saveGrantPeriod(c *gin.Context, a actor) {
 	}
 	s.change(c, a, action, func(ctx context.Context, tx *sql.Tx) (int64, error) {
 		if id > 0 {
-			var locked int64
-			if err := tx.QueryRowContext(ctx, "SELECT id FROM grant_periods WHERE institution_id=? AND id=? FOR UPDATE", a.tenant, id).Scan(&locked); err != nil {
+			var program string
+			if err := tx.QueryRowContext(ctx, "SELECT program FROM grant_periods WHERE institution_id=? AND id=? FOR UPDATE", a.tenant, id).Scan(&program); err != nil {
 				return 0, err
+			}
+			if input.Program != "" && input.Program != program {
+				return 0, fmt.Errorf("%w: jenis hibah periode tidak dapat diubah", invalidProposal)
 			}
 			_, err := tx.ExecContext(ctx, `UPDATE grant_periods SET code=?,name=?,proposal_year=?,project_year=?,budget_year=?,opens_at=?,closes_at=?,
    review_start=?,review_end=?,execution_start=?,progress_report_date=?,final_report_date=?,
@@ -266,10 +279,13 @@ func (s service) saveGrantPeriod(c *gin.Context, a actor) {
 				input.AllowDailyJournal, input.AllowProgressReport, input.AllowFinalReport, a.tenant, id)
 			return id, err
 		}
+		if input.Program == "" {
+			input.Program = "research"
+		}
 		result, err := tx.ExecContext(ctx, `INSERT INTO grant_periods
-   (institution_id,code,name,proposal_year,project_year,budget_year,opens_at,closes_at,review_start,review_end,execution_start,progress_report_date,final_report_date,allow_daily_journal,allow_progress_report,allow_final_report)
-   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-			a.tenant, input.Code, input.Name, input.ProposalYear, input.ProjectYear, input.BudgetYear, input.OpensAt.UTC(), input.ClosesAt.UTC(),
+   (institution_id,program,code,name,proposal_year,project_year,budget_year,opens_at,closes_at,review_start,review_end,execution_start,progress_report_date,final_report_date,allow_daily_journal,allow_progress_report,allow_final_report)
+   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			a.tenant, input.Program, input.Code, input.Name, input.ProposalYear, input.ProjectYear, input.BudgetYear, input.OpensAt.UTC(), input.ClosesAt.UTC(),
 			revStart, revEnd, execStart, progDate, finalDate, input.AllowDailyJournal, input.AllowProgressReport, input.AllowFinalReport)
 		if err != nil {
 			return 0, err
@@ -342,14 +358,15 @@ func (s service) publishGrantVersion(c *gin.Context, a actor) {
 	}
 	s.change(c, a, "grants.scheme.publish", func(ctx context.Context, tx *sql.Tx) (int64, error) {
 		var closed bool
-		if err := tx.QueryRowContext(ctx, "SELECT closes_at<=UTC_TIMESTAMP() FROM grant_periods WHERE institution_id=? AND id=? FOR UPDATE", a.tenant, period).Scan(&closed); err != nil {
+		var program string
+		if err := tx.QueryRowContext(ctx, "SELECT closes_at<=UTC_TIMESTAMP(),program FROM grant_periods WHERE institution_id=? AND id=? FOR UPDATE", a.tenant, period).Scan(&closed, &program); err != nil {
 			return 0, err
 		}
 		if closed {
 			return 0, invalid
 		}
 		var scheme, source string
-		if err := tx.QueryRowContext(ctx, "SELECT name FROM schemes WHERE institution_id=? AND id=? AND is_active", a.tenant, input.SchemeID).Scan(&scheme); err != nil {
+		if err := tx.QueryRowContext(ctx, "SELECT name FROM schemes WHERE institution_id=? AND id=? AND program=? AND is_active", a.tenant, input.SchemeID, program).Scan(&scheme); err != nil {
 			return 0, err
 		}
 		if err := tx.QueryRowContext(ctx, "SELECT name FROM funding_sources WHERE institution_id=? AND id=? AND is_active", a.tenant, input.SourceID).Scan(&source); err != nil {
@@ -382,17 +399,18 @@ func (s service) updateGrantVersion(c *gin.Context, a actor) {
 	}
 	s.change(c, a, "grants.scheme.update", func(ctx context.Context, tx *sql.Tx) (int64, error) {
 		var closed bool
-		if err := tx.QueryRowContext(ctx, `SELECT p.closes_at<=UTC_TIMESTAMP()
+		var program string
+		if err := tx.QueryRowContext(ctx, `SELECT p.closes_at<=UTC_TIMESTAMP(),p.program
  FROM grant_scheme_versions v
  JOIN grant_periods p ON p.institution_id=v.institution_id AND p.id=v.period_id
- WHERE v.institution_id=? AND v.id=? FOR UPDATE`, a.tenant, id).Scan(&closed); err != nil {
+ WHERE v.institution_id=? AND v.id=? FOR UPDATE`, a.tenant, id).Scan(&closed, &program); err != nil {
 			return 0, err
 		}
 		if closed {
 			return 0, invalid
 		}
 		var scheme, source string
-		if err := tx.QueryRowContext(ctx, "SELECT name FROM schemes WHERE institution_id=? AND id=? AND is_active", a.tenant, input.SchemeID).Scan(&scheme); err != nil {
+		if err := tx.QueryRowContext(ctx, "SELECT name FROM schemes WHERE institution_id=? AND id=? AND program=? AND is_active", a.tenant, input.SchemeID, program).Scan(&scheme); err != nil {
 			return 0, err
 		}
 		if err := tx.QueryRowContext(ctx, "SELECT name FROM funding_sources WHERE institution_id=? AND id=? AND is_active", a.tenant, input.SourceID).Scan(&source); err != nil {
@@ -421,6 +439,12 @@ func (s service) deleteGrantVersion(c *gin.Context, a actor) {
 		}
 		if used > 0 {
 			return 0, fmt.Errorf("%w: skema tidak dapat dihapus karena sudah digunakan pada usulan penelitian", invalidProposal)
+		}
+		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM community_proposals WHERE institution_id=? AND grant_version_id=?", a.tenant, id).Scan(&used); err != nil {
+			return 0, err
+		}
+		if used > 0 {
+			return 0, fmt.Errorf("%w: skema masih tercatat pada usulan Pengabdian", invalidProposal)
 		}
 		res, err := tx.ExecContext(ctx, "DELETE FROM grant_scheme_versions WHERE institution_id=? AND id=?", a.tenant, id)
 		if err != nil {

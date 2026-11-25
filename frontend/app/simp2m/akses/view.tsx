@@ -17,7 +17,7 @@ type Audit = { id: number; actor: number; action: string; mode: string; role: st
 type Mode = "production" | "trial-admin" | "trial-reader";
 
 const menuPermissions: Record<string, string> = {
-  "iam.read": "Lihat Pengguna & Role",
+  "iam.read": "Lihat Manajemen User",
   "iam.manage": "Tambah pengguna",
   "masterdata.read": "Lihat Master Data",
   "masterdata.manage": "Kelola Master Data",
@@ -33,7 +33,7 @@ const menuPermissions: Record<string, string> = {
   "reports.draft": "Kelola draf laporan penelitian",
 };
 const accountMenus = [
-  { name: "Pengguna & Role", read: "iam.read", manage: "iam.manage", action: "Tambah pengguna" },
+  { name: "Manajemen User", read: "iam.read", manage: "iam.manage", action: "Tambah pengguna" },
   { name: "Master Data", read: "masterdata.read", manage: "masterdata.manage", action: "Tambah, ubah, hapus" },
   { name: "Audit", read: "audit.read" },
   { name: "Hibah", read: "grants.read", manage: "grants.manage", action: "Kelola periode dan skema" },
@@ -244,7 +244,7 @@ export function AccessPanel({ section }: { section: "access" | "institutions" | 
   return (
     <>
       <header className="workspace-heading">
-        <h1 className="text-2xl font-semibold tracking-tight">{section === "institutions" ? "Institusi" : section === "audit" ? "Audit" : "Pengguna dan hak akses"}</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{section === "institutions" ? "Institusi" : section === "audit" ? "Audit" : "Manajemen User"}</h1>
         {mode !== "production" && <p className="mt-1 text-sm font-medium text-brand">Mode trial · database terpisah</p>}
       </header>
       <div className="workspace-toolbar grid gap-2 sm:grid-cols-[minmax(0,13rem)_minmax(0,24rem)]">

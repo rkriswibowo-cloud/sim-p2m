@@ -43,7 +43,7 @@ export default async function SettingsPage() {
               <Building2 size={17} aria-hidden="true" /> Kelola institusi <ArrowUpRight className="ml-auto" size={15} aria-hidden="true" />
             </Link>
             <Link href="/simp2m/akses" className="flex items-center gap-2 rounded-lg border border-border p-3 text-sm hover:bg-muted">
-              <ShieldCheck size={17} aria-hidden="true" /> Kelola pengguna dan izin <ArrowUpRight className="ml-auto" size={15} aria-hidden="true" />
+              <ShieldCheck size={17} aria-hidden="true" /> Manajemen User <ArrowUpRight className="ml-auto" size={15} aria-hidden="true" />
             </Link>
           </CardContent>
         </Card>}

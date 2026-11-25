@@ -10,9 +10,11 @@ import { confirmRemoval, workspaceToastOptions } from "../confirm-removal";
 import { getMinOutputInfo } from "../scheme-output-info";
 
 type Mode = "production" | "trial-admin" | "trial-reader";
+type Program = "research" | "community";
 type Choice = { id: number; name: string };
 type Institution = Choice & { active: boolean; canGrantRead: boolean };
 type Period = Choice & {
+  program: Program;
   code: string; proposalYear: number; projectYear: number; budgetYear: number;
   opensAt: string; closesAt: string;
   reviewStart?: string; reviewEnd?: string; executionStart?: string; progressReportDate?: string; finalReportDate?: string;
@@ -35,7 +37,8 @@ const jafungLabels: Record<string, string> = {
 };
 type Answer = { result: "eligible" | "ineligible" | "manual"; reasons: string[] };
 type Overview = { periods: Period[]; versions: Version[]; canManage: boolean };
-type Options = { schemes: Choice[]; sources: Choice[] };
+type Options = { schemes: Choice[]; communitySchemes?: Choice[]; sources: Choice[] };
+const programs = [{ id: "research", label: "Penelitian" }, { id: "community", label: "Pengabdian kepada Masyarakat" }] as const;
 const statusLabels = { scheduled: "Terjadwal", open: "Terbuka", closed: "Ditutup" };
 const verdictLabels = { eligible: "Memenuhi syarat awal", ineligible: "Tidak memenuhi syarat", manual: "Perlu verifikasi" };
 const localDate = new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Jakarta" });
@@ -73,7 +76,9 @@ export function GrantPanel() {
   const [institution, setInstitution] = useState(0);
   const [overview, setOverview] = useState<Overview>();
   const [options, setOptions] = useState<Options>();
-  const [period, setPeriod] = useState(0);
+  const [selectedPeriod, setPeriod] = useState(0);
+  const [program, setProgram] = useState<Program>("research");
+  const [year, setYear] = useState("");
   const [create, setCreate] = useState(false);
   const [editingPeriod, setEditingPeriod] = useState<Period>();
   const [revision, setRevision] = useState(0);
@@ -83,7 +88,12 @@ export function GrantPanel() {
   const [error, setError] = useState("");
   const base = mode === "production" ? "/api/v1/iam" : `/api/v1/trial/${mode}/iam`;
   const endpoint = `${base}/institutions/${institution}/grants`;
-  const selected = overview?.periods.find(item => item.id === period);
+  const programPeriods = (overview?.periods ?? []).filter(item => (item.program ?? "research") === program);
+  const years = [...new Set(programPeriods.map(item => item.proposalYear))].sort((a,b) => b-a);
+  const visiblePeriods = programPeriods.filter(item => !year || item.proposalYear === Number(year));
+  const selected = visiblePeriods.find(item => item.id === selectedPeriod) ?? visiblePeriods[0];
+  const period = selected?.id ?? 0;
+  const availableSchemes = (program === "community" ? options?.communitySchemes : options?.schemes) ?? [];
 
   useEffect(() => {
     const controller = new AbortController();
@@ -125,6 +135,15 @@ export function GrantPanel() {
     setError("");
   }
 
+  function selectPeriod(id: number) {
+    setPeriod(id);
+    setCreate(false);
+    setEditingPeriod(undefined);
+    setRevisionForm(undefined);
+    setAnswers({});
+    setError("");
+  }
+
   async function chooseMode(value: Mode) {
     if (value === mode) return;
     setPending(true);
@@ -148,7 +167,7 @@ export function GrantPanel() {
     setError("");
     try {
       const payload = kind === "period" ? {
-        code: fields.get("code"), name: fields.get("name"),
+        code: fields.get("code"), name: fields.get("name"), program,
         proposalYear: Number(fields.get("proposalYear")), projectYear: Number(fields.get("projectYear")),
         budgetYear: Number(fields.get("budgetYear")), opensAt: dateWithOffset(fields.get("opensAt")), closesAt: dateWithOffset(fields.get("closesAt")),
         reviewStart: String(fields.get("reviewStart") ?? ""),
@@ -175,6 +194,7 @@ export function GrantPanel() {
         setCreate(false);
         setEditingPeriod(undefined);
         setPeriod(response.id);
+        setYear("");
       } else {
         setRevisionForm(undefined);
         setAnswers({});
@@ -263,7 +283,17 @@ export function GrantPanel() {
         {overview?.canManage && !create && <Button disabled={pending} onClick={() => {setEditingPeriod(undefined);setRevisionForm(undefined);setCreate(true);}}>Buat periode</Button>}
       </header>
 
-      <div className="workspace-toolbar grid gap-2 sm:grid-cols-3">
+      <div role="group" aria-label="Jenis hibah" className="grid gap-1 rounded-lg border border-border bg-card p-1 sm:grid-cols-2">
+        {programs.map(item => <Button key={item.id} type="button" variant={program === item.id ? "default" : "ghost"}
+          aria-pressed={program === item.id} disabled={pending} onClick={() => {
+            if (program === item.id) return;
+            setProgram(item.id); setYear(""); selectPeriod(0);
+          }}>{item.label}</Button>)}
+      </div>
+      {program === "community" && <p className="text-sm text-muted-foreground">
+        Atur pagu PkM dan Sister School secara terpisah pada setiap periode.
+      </p>}
+      <div className="workspace-toolbar grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         {system && <div className="min-w-0">
           <label htmlFor="grant-mode" className="mb-1 block">Lingkungan dan peran</label>
           <select id="grant-mode" className="w-full" value={mode} disabled={pending} onChange={event => void chooseMode(event.target.value as Mode)}>
@@ -278,17 +308,23 @@ export function GrantPanel() {
           </select>
         </div>
         <div className="min-w-0">
+          <label htmlFor="grant-year" className="mb-1 block">Tahun usulan</label>
+          <select id="grant-year" className="w-full" value={year} disabled={pending} onChange={event => {
+            setYear(event.target.value); selectPeriod(0);
+          }}><option value="">Semua tahun</option>{years.map(item => <option key={item}>{item}</option>)}</select>
+        </div>
+        <div className="min-w-0">
           <label htmlFor="grant-period" className="mb-1 block">Periode hibah</label>
-          <select id="grant-period" className="w-full" value={period} disabled={pending} onChange={event => {setCreate(false);setEditingPeriod(undefined);setRevisionForm(undefined);setAnswers({});setPeriod(Number(event.target.value));}}>
-            {!overview?.periods.length && <option value={0}>Belum ada periode</option>}
-            {overview?.periods.map(item => <option key={item.id} value={item.id}>{item.name} · {statusLabels[item.state]}</option>)}
+          <select id="grant-period" className="w-full" value={period} disabled={pending} onChange={event => selectPeriod(Number(event.target.value))}>
+            {!visiblePeriods.length && <option value={0}>Belum ada periode</option>}
+            {visiblePeriods.map(item => <option key={item.id} value={item.id}>{item.proposalYear} · {item.name} · {statusLabels[item.state]}</option>)}
           </select>
         </div>
       </div>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 
       {create && overview?.canManage && <Card className="workspace-panel rounded-md">
-        <CardHeader><CardTitle>{editingPeriod ? "Ubah periode" : "Periode baru"}</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{editingPeriod ? "Ubah periode" : "Periode baru"} · {programs.find(item => item.id === program)?.label}</CardTitle></CardHeader>
         <CardContent>
           <form key={editingPeriod?.id ?? "new"} method="post" onSubmit={event => void submit(event,"period")} className="workspace-fields grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <Input label="Kode periode" name="code" maxLength={64} required defaultValue={editingPeriod?.code} />
@@ -301,10 +337,10 @@ export function GrantPanel() {
             <Input label="Mulai review" name="reviewStart" type="date" defaultValue={editingPeriod?.reviewStart ?? ""} />
             <Input label="Selesai review" name="reviewEnd" type="date" defaultValue={editingPeriod?.reviewEnd ?? ""} />
             <Input label="Mulai pelaksanaan" name="executionStart" type="date" defaultValue={editingPeriod?.executionStart ?? ""} />
-            <Input label="Laporan kemajuan 75%" name="progressReportDate" type="date" defaultValue={editingPeriod?.progressReportDate ?? ""} />
+            {program === "research" && <Input label="Laporan kemajuan 75%" name="progressReportDate" type="date" defaultValue={editingPeriod?.progressReportDate ?? ""} />}
             <Input label="Laporan akhir" name="finalReportDate" type="date" defaultValue={editingPeriod?.finalReportDate ?? ""} />
             <label className="flex items-center gap-2"><input type="checkbox" name="allowDailyJournal" defaultChecked={editingPeriod?.allowDailyJournal} /> Aktifkan Catatan Harian</label>
-            <label className="flex items-center gap-2"><input type="checkbox" name="allowProgressReport" defaultChecked={editingPeriod?.allowProgressReport} /> Aktifkan Laporan Kemajuan</label>
+            {program === "research" && <label className="flex items-center gap-2"><input type="checkbox" name="allowProgressReport" defaultChecked={editingPeriod?.allowProgressReport} /> Aktifkan Laporan Kemajuan</label>}
             <label className="flex items-center gap-2"><input type="checkbox" name="allowFinalReport" defaultChecked={editingPeriod?.allowFinalReport} /> Aktifkan Laporan Akhir</label>
             <div className="workspace-form-actions"><Button type="button" variant="outline" disabled={pending} onClick={() => setCreate(false)}>Batal</Button><Button disabled={pending}>Simpan periode</Button></div>
           </form>
@@ -327,7 +363,7 @@ export function GrantPanel() {
           <p className="text-xs text-muted-foreground">{selected.code} · Usulan {selected.proposalYear} · Pelaksanaan {selected.projectYear} · Anggaran {selected.budgetYear}</p>
           {(selected.reviewStart || selected.executionStart || selected.progressReportDate || selected.finalReportDate) && (
             <p className="text-xs text-muted-foreground">
-              Timeline: Review {selected.reviewStart || "-"} s.d. {selected.reviewEnd || "-"} · Pelaksanaan {selected.executionStart || "-"} · Lap. Kemajuan 75% {selected.progressReportDate || "-"} · Lap. Akhir {selected.finalReportDate || "-"}
+              Timeline: Review {selected.reviewStart || "-"} s.d. {selected.reviewEnd || "-"} · Pelaksanaan {selected.executionStart || "-"}{program === "research" && ` · Lap. Kemajuan 75% ${selected.progressReportDate || "-"}`} · Lap. Akhir {selected.finalReportDate || "-"}
             </p>
           )}
           <div className="flex flex-wrap gap-2">
@@ -344,7 +380,7 @@ export function GrantPanel() {
                     ["allowProgressReport", "Laporan Kemajuan"],
                     ["allowFinalReport", "Laporan Akhir"],
                   ] as const
-                ).map(([key, label]) => {
+                ).filter(([key]) => program === "research" || key !== "allowProgressReport").map(([key, label]) => {
                   const active = Boolean(selected[key]);
                   return (
                     <Button
@@ -368,11 +404,11 @@ export function GrantPanel() {
       {revisionForm && options && selected && <Card className="workspace-panel rounded-md">
         <CardHeader><CardTitle>{previous ? `Edit skema · ${previous.scheme}` : "Tambah skema untuk periode ini"}</CardTitle></CardHeader>
         <CardContent>
-          {(!options.schemes.length || !options.sources.length) && <p role="status" className="mb-3 text-sm">Tambahkan skema dan sumber dana aktif di Master Data sebelum menerbitkan.</p>}
+          {(!availableSchemes.length || !options.sources.length) && <p role="status" className="mb-3 text-sm">Skema sesuai jenis hibah dan sumber dana aktif diperlukan.</p>}
           <form key={`${period}:${previous?.id ?? "new"}`} method="post" onSubmit={event => void submit(event,"version")} className="workspace-fields grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <div className="min-w-0"><label htmlFor="scheme" className="mb-1 block">Skema</label>
               <select id="scheme" name="schemeId" className="w-full" required defaultValue={previous?.schemeId ?? ""}>
-                <option value="">Pilih skema</option>{options.schemes.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}
+                <option value="">Pilih skema</option>{availableSchemes.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}
               </select>
             </div>
             <div className="min-w-0"><label htmlFor="source" className="mb-1 block">Sumber dana</label>
@@ -394,7 +430,7 @@ export function GrantPanel() {
               <textarea id="manual" name="manual" rows={3} maxLength={1000} defaultValue={previous?.manual} className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm" />
             </div>
             <div className="workspace-form-actions"><Button type="button" variant="outline" disabled={pending} onClick={() => setRevisionForm(undefined)}>Batal</Button>
-              <Button disabled={pending || !options.schemes.length || !options.sources.length}>{previous ? "Simpan perubahan" : "Simpan skema"}</Button>
+              <Button disabled={pending || !availableSchemes.length || !options.sources.length}>{previous ? "Simpan perubahan" : "Simpan skema"}</Button>
             </div>
           </form>
         </CardContent>

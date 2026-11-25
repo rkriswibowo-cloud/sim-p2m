@@ -1,0 +1,6 @@
+ALTER TABLE research_journal
+ ADD COLUMN progress TINYINT UNSIGNED NULL,
+ ADD COLUMN file_number VARCHAR(100) NOT NULL DEFAULT '',
+ ADD COLUMN cost_category VARCHAR(200) NOT NULL DEFAULT '',
+ ADD COLUMN amount_idr BIGINT UNSIGNED NOT NULL DEFAULT 0,
+ ADD CONSTRAINT ck_research_journal_progress CHECK (progress <= 100);

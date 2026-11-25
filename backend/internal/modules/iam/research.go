@@ -23,22 +23,22 @@ var quotaFull = errors.New("scheme quota reached")
 var eligibilityBlocked = errors.New("grant eligibility not met")
 
 type proposal struct {
-	ID                   int64        `json:"id"`
-	GrantVersionID       int64        `json:"grantVersionId"`
-	PeriodID             int64        `json:"periodId"`
-	SchemeID             int64        `json:"schemeId"`
-	GrantVersion         int          `json:"grantVersion"`
-	RequiresVerification bool         `json:"requiresVerification"`
-	FieldID              *int64       `json:"fieldId"`
-	Title                string       `json:"title"`
-	Status               string       `json:"status"`
-	Revision             int          `json:"revision"`
-	Budget               string       `json:"budget"`
-	Scheme               string       `json:"scheme"`
-	Period               string       `json:"period"`
-	Owner                string       `json:"owner"`
-	UpdatedAt            time.Time    `json:"updatedAt"`
-	Data                 proposalData `json:"data"`
+	ID                   int64           `json:"id"`
+	GrantVersionID       int64           `json:"grantVersionId"`
+	PeriodID             int64           `json:"periodId"`
+	SchemeID             int64           `json:"schemeId"`
+	GrantVersion         int             `json:"grantVersion"`
+	RequiresVerification bool            `json:"requiresVerification"`
+	FieldID              *int64          `json:"fieldId"`
+	Title                string          `json:"title"`
+	Status               string          `json:"status"`
+	Revision             int             `json:"revision"`
+	Budget               string          `json:"budget"`
+	Scheme               string          `json:"scheme"`
+	Period               string          `json:"period"`
+	Owner                string          `json:"owner"`
+	UpdatedAt            time.Time       `json:"updatedAt"`
+	Data                 proposalData    `json:"data"`
 	RoadmapImage         bool            `json:"roadmapImage"`
 	MethodImage          bool            `json:"methodImage"`
 	StudentLetterFile    bool            `json:"studentLetterFile"`
@@ -83,12 +83,12 @@ func readProposal(row rowScanner) (proposal, error) {
 
 func (s service) researchOptions(c *gin.Context, a actor) {
 	ctx := c.Request.Context()
-	periods, err := s.grantPeriods(ctx, a.tenant, false)
+	periods, err := s.grantPeriods(ctx, a.tenant, false, "research")
 	if err != nil {
 		c.Status(503)
 		return
 	}
-	versions, err := s.grantVersions(ctx, a.tenant, false)
+	versions, err := s.grantVersions(ctx, a.tenant, false, "research")
 	if err != nil {
 		c.Status(503)
 		return
@@ -193,7 +193,7 @@ func lockGrant(ctx context.Context, tx *sql.Tx, tenant, period, version int64) (
  p.opens_at<=UTC_TIMESTAMP() AND p.closes_at>UTC_TIMESTAMP(),
  v.version_no=(SELECT MAX(x.version_no) FROM grant_scheme_versions x WHERE x.institution_id=v.institution_id AND x.period_id=v.period_id AND x.scheme_id=v.scheme_id)
  FROM grant_scheme_versions v JOIN grant_periods p ON p.id=v.period_id AND p.institution_id=v.institution_id
- WHERE v.institution_id=? AND v.id=?`, tenant, version).Scan(&g.scheme, &g.budget, &g.quota, &g.duration, &g.required, &g.requireNuptk, &g.minJafung, &g.manual, &g.open, &g.current)
+ WHERE v.institution_id=? AND v.id=? AND p.program='research'`, tenant, version).Scan(&g.scheme, &g.budget, &g.quota, &g.duration, &g.required, &g.requireNuptk, &g.minJafung, &g.manual, &g.open, &g.current)
 	return g, err
 }
 

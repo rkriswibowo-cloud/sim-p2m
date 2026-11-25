@@ -117,6 +117,8 @@ Pengusul melihat skema terbaru pada periode terbuka dan dapat memeriksa kelayaka
 
 API Hibah memakai awalan `/api/v1/iam/institutions/:institution/grants` untuk daftar, `/options` untuk pilihan aktif, `POST /periods` dan `PUT /periods/:id` untuk periode, `POST /periods/:id/versions` untuk penerbitan, serta `GET /versions/:id/eligibility` untuk kelayakan. Route trial memakai awalan IAM trial. Runtime perlu akses `SELECT, INSERT, UPDATE` pada periode dan `SELECT, INSERT` pada versi skema.
 
+Hibah memiliki pengaturan periode terpisah untuk Penelitian dan Pengabdian kepada Masyarakat. Jalankan `seed-masterdata` untuk menyediakan skema PkM dan Sister School di UAM. Atur pagu setiap skema di periode dan tahun yang sesuai. Migrasi klasifikasi memerlukan izin `ALTER` pada `grant_periods` dan `schemes`.
+
 ### Usulan Penelitian
 
 Berikan izin **Buat dan kirim Usulan Penelitian** untuk pengusul dan **Verifikasi syarat usulan** untuk petugas LPPM. Pengusul memilih skema yang sedang terbuka, membuat draf, dan mengisi wizard. Perubahan disimpan otomatis dengan pemeriksaan revisi. Jika skema berubah, pengusul dapat memilih **Gunakan versi skema terbaru** pada draf sebelum mengirim.
@@ -134,3 +136,5 @@ Menu **Pengabdian kepada Masyarakat** menyediakan draf usulan milik pengusul. Iz
 Menu **Dokumen** menyediakan empat template penelitian asli melalui unduhan berizin. Simpan file DOCX di root proyek saat API dijalankan dari `backend`, atau tetapkan `SIMP2M_DOCUMENT_DIR` ke lokasi privat file. Menu **Laporan** menyediakan draf kemajuan dan akhir bagi pemilik usulan penelitian yang sudah mengirim usulan, dengan narasi awal yang dapat disalin dari usulan. Pengguna lain memerlukan izin masing-masing dari matriks Pengguna & Role. Akun runtime memerlukan `SELECT, INSERT, UPDATE` pada tabel `research_reports` di database utama dan trial.
 
 Menu **Penelitian** memiliki tab Usulan, Catatan Harian, Laporan Kemajuan, dan Laporan Akhir. Pemilik usulan yang sudah dikirim dapat mengelola catatan harian. Tab laporan memakai draf yang sama dengan menu Laporan dan memerlukan izin Laporan pada institusi tersebut. Akun runtime memerlukan `SELECT, INSERT, UPDATE` pada tabel `research_journal` di database utama dan trial.
+
+Migrasi 53–58 membutuhkan `ALTER` pada `research_journal`, `grant_periods`, `schemes`, dan `community_proposals`. Akun runtime membutuhkan `SELECT, INSERT` pada `research_journal_evidence` dan `SELECT, INSERT, UPDATE` pada `progress_report_uploads` di kedua database. Simpan PDF Laporan Kemajuan untuk membuka pencairan di atas 75% dari nilai kontrak. Rekap LPJ di draf Laporan Akhir membaca transaksi dan bukti dari Catatan Harian.

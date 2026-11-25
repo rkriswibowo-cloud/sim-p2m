@@ -16,6 +16,7 @@ type Disbursement = { id: number; projectId: number; termName: string; amount: s
 type Project = {
   id: number; proposalId: number; title: string; owner: string; scheme: string; period: string;
   contractNumber: string; contractDate: string; approvedBudget: string; totalDisbursed: string; status: string;
+  progressUploaded: boolean;
   amendments: Amendment[]; disbursements: Disbursement[];
 };
 type ExternalFunding = {
@@ -253,6 +254,8 @@ export function FundingPanel() {
                     {/* Termin Pencairan */}
                     <div className="rounded-md border border-border p-3 space-y-2">
                       <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Termin &amp; Pencairan Dana</h4>
+                      {selected.progressUploaded ? <a className="text-xs text-brand underline" href={`${base}/institutions/${tenant}/reports/${selected.proposalId}/progress-file`}>Unduh Laporan Kemajuan</a> :
+                        <p className="text-xs text-muted-foreground">Pencairan di atas 75% terkunci hingga PDF Laporan Kemajuan diunggah.</p>}
                       {!selected.disbursements.length && <p className="text-xs text-muted-foreground">Belum ada termin pencairan.</p>}
                       {selected.disbursements.map((d) => (
                         <div key={d.id} className="rounded border border-border p-2 text-xs space-y-1.5">
@@ -268,7 +271,8 @@ export function FundingPanel() {
                               Lihat Bukti Transfer
                             </a>
                           )}
-                          {canDecide && !readOnly && d.status !== "transferred" && (
+                          {canDecide && !readOnly && d.status !== "transferred" && (selected.progressUploaded ||
+                            BigInt(selected.totalDisbursed) + BigInt(d.amount) <= BigInt(selected.approvedBudget) * BigInt(3) / BigInt(4)) && (
                             <div className="grid grid-cols-1 gap-2 border-t border-border pt-2 sm:grid-cols-3 items-end">
                               <Input id={`tr-date-${d.id}`} label="Tanggal Transfer" type="date" value={transferDate} onChange={(e) => setTransferDate(e.target.value)} />
                               <Input id={`tr-ref-${d.id}`} label="No. Referensi" placeholder="SP2D/TRF-001" value={transferRef} onChange={(e) => setTransferRef(e.target.value)} />

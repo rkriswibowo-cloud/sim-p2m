@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { RichTextEditor } from "./rich-editor";
 
 export const steps = ["Skema dan identitas", "Tim", "Roadmap dan ringkasan", "Pendahuluan dan metode", "Luaran dan referensi", "RAB dan jadwal", "Tinjau usulan"] as const;
-export type Choice = { id: number; name: string };
+export type Choice = { id: number; name: string; program?: string };
 export type MemberConsent = { lecturerId: number; name: string; code: string; status: "pending" | "approved" | "rejected"; note: string };
 type TextKey = "object" | "location" | "starts" | "ends" | "partner" | "contribution" | "findings" | "journal" | "roadmap" | "summary" | "sdgKeywords" | "introduction" | "literature" | "method" | "expected" | "references";
 type ListKey = "team" | "students" | "outputs" | "costs" | "schedule";
@@ -36,9 +36,11 @@ const rowDefinitions: Record<ListKey, { title: string; columns: Column[] }> = {
 };
 const formatMoney = new Intl.NumberFormat("id-ID", {style:"currency",currency:"IDR", maximumFractionDigits:0});
 
-export function ProposalFields({ step, data, options, title, field, budget, consents, disabled, onTitle, onField, onData }: {
+export function ProposalFields({ step, data, options, title, field, budget, consents, disabled, onTitle, onField, onData, teamHint, communityTeam = false }: {
   step:number; data:ProposalData; options:OptionLists; title:string; field:number|null; budget:string; consents?:MemberConsent[];
   disabled:boolean; onTitle:(value:string)=>void; onField:(value:number|null)=>void; onData:(value:ProposalData)=>void;
+  teamHint?: string;
+  communityTeam?: boolean;
 }) {
   function text(key:TextKey, label:string, type="text") {
     return <Input key={key} label={label} id={key} type={type} value={data[key] ?? ""} disabled={disabled}
@@ -49,28 +51,36 @@ export function ProposalFields({ step, data, options, title, field, budget, cons
       onChange={next => onData({...data,[key]:next})} />;
   }
   const singleRowGrid: Partial<Record<ListKey, string>> = {
-    team: "lg:grid-cols-[minmax(180px,1.5fr)_minmax(130px,1fr)_105px_minmax(150px,1.2fr)_auto_auto]",
+    team: communityTeam ? "lg:grid-cols-[minmax(150px,1.5fr)_minmax(120px,1fr)_105px_minmax(140px,1.2fr)_auto]" :
+      "lg:grid-cols-[minmax(180px,1.5fr)_minmax(130px,1fr)_105px_minmax(150px,1.2fr)_auto_auto]",
     students: "lg:grid-cols-[minmax(180px,1.4fr)_minmax(170px,1.2fr)_minmax(180px,1.4fr)_auto]",
     costs: "lg:grid-cols-[minmax(140px,1.1fr)_minmax(130px,1.1fr)_minmax(130px,1.1fr)_85px_90px_130px_auto]",
     schedule: "lg:grid-cols-[minmax(130px,1.1fr)_minmax(130px,1.1fr)_minmax(120px,1fr)_minmax(120px,1fr)_90px_90px_auto]",
   };
   function records(key:ListKey) {
     const definition=rowDefinitions[key], items=data[key] ?? [];
+    const columns: Column[] = key === "students" && communityTeam
+      ? [{ key:"id",name:"Nama mahasiswa",type:"students" }, { key:"program",name:"Program studi" }, { key:"activity",name:"Bentuk keterlibatan" }]
+      : definition.columns;
     const rowClass = singleRowGrid[key]
       ? `grid grid-cols-1 items-end gap-2 border-b border-border pb-2 sm:grid-cols-2 ${singleRowGrid[key]}`
       : "grid grid-cols-1 items-end gap-2 border-b border-border pb-2 sm:grid-cols-2 xl:grid-cols-3";
     return <fieldset key={key} className="min-w-0 space-y-2 rounded-md border border-border p-2">
       <legend className="px-1 text-xs font-semibold">{definition.title}</legend>
-      {key==="team" && <p className="text-xs text-muted-foreground">Minimal 1 anggota dosen dan maksimal 3 anggota dosen.</p>}
+      {key==="team" && <p className="text-xs text-muted-foreground">{teamHint ?? "Minimal 1 anggota dosen dan maksimal 3 anggota dosen."}</p>}
       {key==="outputs" && <p className="text-xs text-muted-foreground">Penelitian berbasis output: wajib menyertakan minimal 1 luaran publikasi artikel ilmiah.</p>}
       {!items.length && <p className="text-xs text-muted-foreground">Belum ada baris.</p>}
       {key==="costs" && !disabled && !options.budgetCategories.length &&
         <p className="text-xs text-muted-foreground">Belum ada kategori RAB aktif. Hubungi admin untuk menambahkan kategori.</p>}
       <div className={singleRowGrid[key] ? "space-y-2 overflow-x-auto pb-1" : "space-y-2"}>
       {items.map((item,index) => <div key={index} className={rowClass}>
-        {definition.columns.map(column => {
+        {columns.map(column => {
           const id=`${key}-${index}-${column.key}`;
           const update=(value:string|number) => onData({...data,[key]:items.map((row,i) => i===index ? {...row,[column.key]:value}:row)});
+          if (key === "students" && communityTeam && column.key === "program") {
+            const program = options.students.find(option => option.id === Number(item.id))?.program;
+            return <Input key={column.key} id={id} label={column.name} value={program ?? ""} placeholder="Dari Master Data" readOnly />;
+          }
           if(column.type==="budgetCategory") {
             if(disabled) return <Input key={column.key} id={id} label={column.name} value={item.category ?? ""} readOnly />;
             const choices=options.budgetCategories;
@@ -136,7 +146,7 @@ export function ProposalFields({ step, data, options, title, field, budget, cons
         })}
         {!disabled && <Button type="button" variant="ghost" size="sm" className="shrink-0 justify-self-start text-destructive"
           aria-label={`Hapus baris ${definition.title} ${index+1}`} onClick={()=>onData({...data,[key]:items.filter((_,i)=>i!==index)})}>{singleRowGrid[key] ? "Hapus" : "Hapus baris"}</Button>}
-        {key==="team" && Number(item.id) > 0 && (() => {
+        {key==="team" && !communityTeam && Number(item.id) > 0 && (() => {
           const c = consents?.find(row => row.lecturerId === Number(item.id));
           if (!c) return <span className="whitespace-nowrap pb-2 text-xs text-muted-foreground">Menunggu simpan</span>;
           const label = c.status === "approved" ? "Disetujui" : c.status === "rejected" ? `Ditolak${c.note ? `: ${c.note}` : ""}` : "Menunggu persetujuan";

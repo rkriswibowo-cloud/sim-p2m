@@ -192,7 +192,7 @@ export function PeriodTimelineWidget({ institutionId }: { institutionId: number 
                 ))}
               </select>
             )}
-            <span className="rounded bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+            <span className="rounded bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-[color:var(--brand)]">
               {currentStage ? `Tahap saat ini: ${currentStage.label}` : "Seluruh tahapan selesai"} · {progressPercent}%
             </span>
           </div>
@@ -227,20 +227,20 @@ export function PeriodTimelineWidget({ institutionId }: { institutionId: number 
                   <div className="flex items-center justify-between gap-1 text-[11px] font-medium text-muted-foreground">
                     <span>Tahap {idx + 1}</span>
                     {isDone ? (
-                      <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                      <span className="inline-flex items-center gap-1 text-[color:var(--brand)]">
                         <CheckCircle2 size={13} aria-hidden="true" /> {statusLabel[stage.status]}
                       </span>
                     ) : isActive ? (
-                      <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-300 font-semibold">
+                      <span className="inline-flex items-center gap-1 font-semibold text-[color:var(--brand)]">
                         <Clock size={13} aria-hidden="true" /> {statusLabel[stage.status]}
                       </span>
                     ) : (
                       <span>{statusLabel[stage.status]}</span>
                     )}
                   </div>
-                  <p className="mt-1.5 text-sm font-semibold leading-snug">{stage.label}</p>
+                  <p className="mt-1.5 text-sm font-semibold leading-snug text-foreground">{stage.label}</p>
                 </div>
-                <p className="mt-2 rounded bg-amber-500/15 px-2 py-1 text-center text-[11px] font-medium text-amber-900 dark:text-amber-200">
+                <p className="workspace-timeline-date mt-2 rounded bg-amber-500/15 px-2 py-1 text-center text-[11px] font-medium">
                   {stage.dateText}
                 </p>
               </div>

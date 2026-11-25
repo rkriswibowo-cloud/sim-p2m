@@ -51,20 +51,21 @@ type disbursementView struct {
 }
 
 type projectView struct {
-	ID             int64              `json:"id"`
-	ProposalID     int64              `json:"proposalId"`
-	Title          string             `json:"title"`
-	Owner          string             `json:"owner"`
-	OwnerID        int64              `json:"ownerId"`
-	Scheme         string             `json:"scheme"`
-	Period         string             `json:"period"`
-	ContractNumber string             `json:"contractNumber"`
-	ContractDate   string             `json:"contractDate"`
-	ApprovedBudget string             `json:"approvedBudget"`
-	TotalDisbursed string             `json:"totalDisbursed"`
-	Status         string             `json:"status"`
-	Amendments     []amendmentView    `json:"amendments"`
-	Disbursements  []disbursementView `json:"disbursements"`
+	ID               int64              `json:"id"`
+	ProposalID       int64              `json:"proposalId"`
+	Title            string             `json:"title"`
+	Owner            string             `json:"owner"`
+	OwnerID          int64              `json:"ownerId"`
+	Scheme           string             `json:"scheme"`
+	Period           string             `json:"period"`
+	ContractNumber   string             `json:"contractNumber"`
+	ContractDate     string             `json:"contractDate"`
+	ApprovedBudget   string             `json:"approvedBudget"`
+	TotalDisbursed   string             `json:"totalDisbursed"`
+	Status           string             `json:"status"`
+	ProgressUploaded bool               `json:"progressUploaded"`
+	Amendments       []amendmentView    `json:"amendments"`
+	Disbursements    []disbursementView `json:"disbursements"`
 }
 
 type externalFundingView struct {
@@ -130,7 +131,8 @@ func (s service) listProjects(c *gin.Context, a actor) {
 	}
 
 	rows, err := s.db.QueryContext(ctx, `SELECT pr.id, pr.proposal_id, p.title, u.display_name, p.owner_user_id, v.scheme_name, g.name,
- pr.contract_number, DATE_FORMAT(pr.contract_date,'%Y-%m-%d'), CAST(pr.approved_budget_idr AS CHAR), pr.status
+ pr.contract_number, DATE_FORMAT(pr.contract_date,'%Y-%m-%d'), CAST(pr.approved_budget_idr AS CHAR), pr.status,
+ EXISTS (SELECT 1 FROM progress_report_uploads f WHERE f.proposal_id=p.id)
  FROM research_projects pr
  JOIN research_proposals p ON p.institution_id=pr.institution_id AND p.id=pr.proposal_id
  JOIN users u ON u.id=p.owner_user_id
@@ -148,7 +150,7 @@ func (s service) listProjects(c *gin.Context, a actor) {
 	for rows.Next() {
 		var pv projectView
 		if err := rows.Scan(&pv.ID, &pv.ProposalID, &pv.Title, &pv.Owner, &pv.OwnerID, &pv.Scheme, &pv.Period,
-			&pv.ContractNumber, &pv.ContractDate, &pv.ApprovedBudget, &pv.Status); err != nil {
+			&pv.ContractNumber, &pv.ContractDate, &pv.ApprovedBudget, &pv.Status, &pv.ProgressUploaded); err != nil {
 			c.Status(503)
 			return
 		}
@@ -396,8 +398,31 @@ func (s service) markDisbursementTransferred(c *gin.Context, a actor) {
 
 	s.change(c, a, "research.disbursement.transfer", func(ctx context.Context, tx *sql.Tx) (int64, error) {
 		var curStatus string
-		if err := tx.QueryRowContext(ctx, "SELECT status FROM project_disbursements WHERE institution_id=? AND id=? FOR UPDATE", a.tenant, disbID).Scan(&curStatus); err != nil {
+		var project, proposal int64
+		var amount, approved, transferred uint64
+		if err := tx.QueryRowContext(ctx, "SELECT status,project_id,amount_idr FROM project_disbursements WHERE institution_id=? AND id=? FOR UPDATE", a.tenant, disbID).Scan(&curStatus, &project, &amount); err != nil {
 			return 0, err
+		}
+		if curStatus != "transferred" {
+			if err := tx.QueryRowContext(ctx, "SELECT proposal_id,approved_budget_idr FROM research_projects WHERE institution_id=? AND id=? FOR UPDATE", a.tenant, project).Scan(&proposal, &approved); err != nil {
+				return 0, err
+			}
+			if err := tx.QueryRowContext(ctx, "SELECT COALESCE(SUM(amount_idr),0) FROM project_disbursements WHERE institution_id=? AND project_id=? AND status='transferred'", a.tenant, project).Scan(&transferred); err != nil {
+				return 0, err
+			}
+			if amount > approved || transferred > approved-amount {
+				return 0, fmt.Errorf("%w: total pencairan melebihi anggaran kontrak", invalidProposal)
+			}
+			firstLimit := approved/4*3 + (approved%4)*3/4
+			if transferred+amount > firstLimit {
+				var uploaded bool
+				if err := tx.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM progress_report_uploads WHERE proposal_id=?)", proposal).Scan(&uploaded); err != nil {
+					return 0, err
+				}
+				if !uploaded {
+					return 0, fmt.Errorf("%w: pencairan di atas 75%% terkunci sampai PDF Laporan Kemajuan diunggah", invalidProposal)
+				}
+			}
 		}
 		if proofMime != "" {
 			_, err := tx.ExecContext(ctx, `UPDATE project_disbursements SET status='transferred', transfer_date=?, reference_no=?, proof_mime=?, proof_content=?, note=?, updated_by=? WHERE id=?`,
@@ -677,4 +702,3 @@ func (s service) verifyExternalFunding(c *gin.Context, a actor) {
 		return extID, nil
 	})
 }
-

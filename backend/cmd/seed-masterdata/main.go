@@ -53,6 +53,9 @@ func seed(ctx context.Context, db *sql.DB) error {
 			return err
 		}
 	}
+	if err := seedCommunitySchemes(ctx, tx, tenant); err != nil {
+		return err
+	}
 	if err := tx.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM masterdata_seed_runs WHERE institution_id=? AND seed_code='uam-research-v1')", tenant).Scan(&seeded); err != nil {
 		return err
 	}
@@ -94,4 +97,26 @@ func seed(ctx context.Context, db *sql.DB) error {
 		return err
 	}
 	return tx.Commit()
+}
+
+func seedCommunitySchemes(ctx context.Context, tx *sql.Tx, tenant int64) error {
+	var seeded bool
+	if err := tx.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM masterdata_seed_runs WHERE institution_id=? AND seed_code='uam-community-schemes-v1')", tenant).Scan(&seeded); err != nil || seeded {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO scheme_groups (institution_id,code,name) VALUES (?,'PENGABDIAN','Pengabdian kepada Masyarakat')
+ ON DUPLICATE KEY UPDATE id=id`, tenant); err != nil {
+		return err
+	}
+	var group int64
+	if err := tx.QueryRowContext(ctx, "SELECT id FROM scheme_groups WHERE institution_id=? AND code='PENGABDIAN'", tenant).Scan(&group); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO schemes (institution_id,code,name,parent_id,program)
+ VALUES (?,'PKM','Pengabdian kepada Masyarakat (PkM)',?,'community'), (?,'SISTER-SCHOOL','Sister School',?,'community')
+ ON DUPLICATE KEY UPDATE program=VALUES(program),parent_id=VALUES(parent_id)`, tenant, group, tenant, group); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, "INSERT INTO masterdata_seed_runs (institution_id,seed_code) VALUES (?,'uam-community-schemes-v1')", tenant)
+	return err
 }

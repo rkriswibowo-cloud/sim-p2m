@@ -48,6 +48,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function MasterDataPanel({ initialKind }: { initialKind?: string }) {
   const [mode, setMode] = useState<Mode>("production");
+  const [showLecturerAccounts, setShowLecturerAccounts] = useState(false);
   const [system, setSystem] = useState(false);
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [institution, setInstitution] = useState(0);
@@ -65,6 +66,7 @@ export function MasterDataPanel({ initialKind }: { initialKind?: string }) {
   const dataset: Dataset = datasets[kind];
   const base = mode === "production" ? "/api/v1/iam" : `/api/v1/trial/${mode}/iam`;
   const collection = `${base}/institutions/${institution}/master-data`;
+  const accountsView = kind === "lecturers" && showLecturerAccounts;
   const cursor = cursors.at(-1) ?? 0;
   const selected = institutions.find(item => item.id === institution);
 
@@ -191,7 +193,7 @@ export function MasterDataPanel({ initialKind }: { initialKind?: string }) {
           <h1 className="text-2xl font-semibold tracking-tight">Master Data</h1>
           {mode !== "production" && <p className="mt-1 text-sm font-medium text-brand">Mode trial · database terpisah</p>}
         </div>
-        {selected?.canMasterManage && !adding && !edit && <Button onClick={() => setAdding(true)} disabled={pending}>Tambah data</Button>}
+        {selected?.canMasterManage && !accountsView && !adding && !edit && <Button onClick={() => setAdding(true)} disabled={pending}>Tambah data</Button>}
       </header>
       <div className="workspace-toolbar grid gap-2 sm:grid-cols-3">
         {system && <div>
@@ -215,7 +217,11 @@ export function MasterDataPanel({ initialKind }: { initialKind?: string }) {
         </div>
       </div>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      {selected?.canMasterManage && (adding || edit) && <Card className="workspace-panel rounded-md">
+      {kind === "lecturers" && institution > 0 && <div role="group" aria-label="Tampilan data dosen" className="flex flex-wrap gap-2">
+        <Button size="sm" variant={accountsView ? "outline" : "default"} aria-pressed={!accountsView} disabled={pending} onClick={() => setShowLecturerAccounts(false)}>Data Dosen</Button>
+        <Button size="sm" variant={accountsView ? "default" : "outline"} aria-pressed={accountsView} disabled={pending || adding || !!edit} onClick={() => setShowLecturerAccounts(true)}>Akun Login Dosen</Button>
+      </div>}
+      {!accountsView && selected?.canMasterManage && (adding || edit) && <Card className="workspace-panel rounded-md">
         <CardHeader><CardTitle>{edit ? "Ubah data" : "Tambah data"} · {dataset.name}</CardTitle></CardHeader>
         <CardContent>
           <form key={`${collection}/${kind}/${edit?.id ?? "new"}`} method="post" onSubmit={event => void save(event)} className="workspace-fields grid items-end gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -237,7 +243,7 @@ export function MasterDataPanel({ initialKind }: { initialKind?: string }) {
           </form>
         </CardContent>
       </Card>}
-      {institution > 0 && <Card className="workspace-panel rounded-md">
+      {!accountsView && institution > 0 && <Card className="workspace-panel rounded-md">
         <CardHeader><CardTitle>{dataset.name}</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           <form className="workspace-table-tools flex flex-wrap items-end gap-2" onSubmit={event => {
@@ -276,7 +282,7 @@ export function MasterDataPanel({ initialKind }: { initialKind?: string }) {
           </div>
         </CardContent>
       </Card>}
-      {kind === "lecturers" && <LecturerAccountsPanel institutionId={institution} />}
+      {accountsView && institution > 0 && <LecturerAccountsPanel key={collection} endpoint={`${base}/institutions/${institution}`} canManage={!!selected?.canMasterManage} />}
     </>
   );
 }
