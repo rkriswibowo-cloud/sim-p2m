@@ -176,6 +176,7 @@ type selectedGrant struct {
 	budget          uint64
 	quota, duration int
 	required        bool
+	requireNuptk    bool
 	minJafung       string
 	manual          string
 	open, current   bool
@@ -188,11 +189,11 @@ func lockGrant(ctx context.Context, tx *sql.Tx, tenant, period, version int64) (
 	if err != nil {
 		return g, err
 	}
-	err = tx.QueryRowContext(ctx, `SELECT v.scheme_id,v.budget_idr,v.quota,v.duration_months,v.active_lecturer,v.min_jafung,v.manual_requirements,
+	err = tx.QueryRowContext(ctx, `SELECT v.scheme_id,v.budget_idr,v.quota,v.duration_months,v.active_lecturer,v.require_nuptk,v.min_jafung,v.manual_requirements,
  p.opens_at<=UTC_TIMESTAMP() AND p.closes_at>UTC_TIMESTAMP(),
  v.version_no=(SELECT MAX(x.version_no) FROM grant_scheme_versions x WHERE x.institution_id=v.institution_id AND x.period_id=v.period_id AND x.scheme_id=v.scheme_id)
  FROM grant_scheme_versions v JOIN grant_periods p ON p.id=v.period_id AND p.institution_id=v.institution_id
- WHERE v.institution_id=? AND v.id=?`, tenant, version).Scan(&g.scheme, &g.budget, &g.quota, &g.duration, &g.required, &g.minJafung, &g.manual, &g.open, &g.current)
+ WHERE v.institution_id=? AND v.id=?`, tenant, version).Scan(&g.scheme, &g.budget, &g.quota, &g.duration, &g.required, &g.requireNuptk, &g.minJafung, &g.manual, &g.open, &g.current)
 	return g, err
 }
 
@@ -219,6 +220,13 @@ func (s service) createProposal(c *gin.Context, a actor) {
 		}
 		if !grant.open || !grant.current {
 			return 0, unavailableGrant
+		}
+		leaderCount, err := countLeaderProposalsInPeriod(ctx, tx, a.tenant, a.ID, period, 0)
+		if err != nil {
+			return 0, err
+		}
+		if leaderCount > 0 {
+			return 0, fmt.Errorf("%w: setiap dosen hanya dapat mengajukan maksimal 1 usulan sebagai Ketua dalam 1 periode hibah", invalidProposal)
 		}
 		result, err := tx.ExecContext(ctx, `INSERT INTO research_proposals (institution_id,owner_user_id,grant_version_id,payload)
    VALUES (?,?,?,'{}')`, a.tenant, a.ID, input.GrantVersionID)
@@ -247,7 +255,12 @@ func (s service) saveProposal(c *gin.Context, a actor) {
 		return
 	}
 	s.change(c, a, "research.draft.save", func(ctx context.Context, tx *sql.Tx) (int64, error) {
-		if _, err := lockDraft(ctx, tx, a, id, input.Revision); err != nil {
+		versionID, err := lockDraft(ctx, tx, a, id, input.Revision)
+		if err != nil {
+			return 0, err
+		}
+		var periodID int64
+		if err := tx.QueryRowContext(ctx, "SELECT period_id FROM grant_scheme_versions WHERE institution_id=? AND id=?", a.tenant, versionID).Scan(&periodID); err != nil {
 			return 0, err
 		}
 		if input.FieldID != nil {
@@ -260,6 +273,9 @@ func (s service) saveProposal(c *gin.Context, a actor) {
 			}
 		}
 		if err := validateTeamRefs(ctx, tx, a.tenant, input.Data); err != nil {
+			return 0, err
+		}
+		if err := validateTeamPeriodQuota(ctx, tx, a.tenant, periodID, id, input.Data.Team); err != nil {
 			return 0, err
 		}
 		if err := resolveBudgetCategories(ctx, tx, a.tenant, &input.Data, false); err != nil {
@@ -331,7 +347,7 @@ func (s service) submitProposal(c *gin.Context, a actor) {
 		}
 		var matches, active, withNUPTK int
 		var lecturerJafung string
-		if grant.required || grant.minJafung != "" {
+		if grant.required || grant.requireNuptk || grant.minJafung != "" {
 			if err := tx.QueryRowContext(ctx, `SELECT COUNT(*),COALESCE(SUM(is_active),0),
  COALESCE(SUM(is_active AND TRIM(nuptk)<>'' AND TRIM(nuptk)<>'-'),0),
  COALESCE(MAX(CASE WHEN is_active THEN jafung ELSE '' END),'')
@@ -343,13 +359,20 @@ func (s service) submitProposal(c *gin.Context, a actor) {
 		if err != nil {
 			return 0, err
 		}
+		leaderCount, err := countLeaderProposalsInPeriod(ctx, tx, a.tenant, a.ID, grant.period, id)
+		if err != nil {
+			return 0, err
+		}
 		item, err := readProposal(tx.QueryRowContext(ctx, proposalSelect+" WHERE p.id=?", id))
 		if err != nil {
 			return 0, err
 		}
-		eligibility, reasons := assessEligibility(grant.open, grant.current, grant.required, grant.minJafung, grant.manual, matches, active, withNUPTK, lecturerJafung, overdue)
-		if eligibility == "ineligible" || (eligibility == "manual" && item.Verification != "verified") {
+		eligibility, reasons := assessEligibility(grant.open, grant.current, grant.required, grant.requireNuptk, grant.minJafung, grant.manual, matches, active, withNUPTK, lecturerJafung, overdue, leaderCount)
+		if eligibility == "ineligible" {
 			return 0, fmt.Errorf("%w: %s", eligibilityBlocked, strings.Join(reasons, " "))
+		}
+		if err := validateTeamPeriodQuota(ctx, tx, a.tenant, grant.period, id, item.Data.Team); err != nil {
+			return 0, err
 		}
 		if err := resolveBudgetCategories(ctx, tx, a.tenant, &item.Data, true); err != nil {
 			return 0, err
@@ -410,4 +433,25 @@ func (s service) archiveProposal(c *gin.Context, a actor) {
 		_, err := tx.ExecContext(ctx, "UPDATE research_proposals SET status='archived',revision=revision+1 WHERE id=?", id)
 		return id, err
 	})
+}
+
+func validateTeamPeriodQuota(ctx context.Context, tx *sql.Tx, tenant, periodID, proposalID int64, team []memberInput) error {
+	for _, m := range team {
+		if m.ID < 1 {
+			continue
+		}
+		count, err := countMemberProposalsInPeriod(ctx, tx, tenant, m.ID, periodID, proposalID)
+		if err != nil {
+			return err
+		}
+		if count > 0 {
+			var name string
+			_ = tx.QueryRowContext(ctx, "SELECT name FROM lecturers WHERE institution_id=? AND id=?", tenant, m.ID).Scan(&name)
+			if name == "" {
+				name = fmt.Sprintf("Dosen #%d", m.ID)
+			}
+			return fmt.Errorf("%w: %s sudah terdaftar sebagai Anggota pada usulan lain di periode ini (maksimal 1 usulan sebagai Anggota per periode)", invalidProposal, name)
+		}
+	}
+	return nil
 }

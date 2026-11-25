@@ -42,6 +42,7 @@ type grantVersion struct {
 	Quota          int       `json:"quota"`
 	Duration       int       `json:"duration"`
 	ActiveLecturer bool      `json:"activeLecturer"`
+	RequireNUPTK   bool      `json:"requireNuptk"`
 	MinJafung      string    `json:"minJafung"`
 	Manual         string    `json:"manual"`
 	PublishedAt    time.Time `json:"publishedAt"`
@@ -128,7 +129,7 @@ func (s service) grantPeriods(ctx context.Context, tenant int64, all bool) ([]gr
 
 func (s service) grantVersions(ctx context.Context, tenant int64, all bool) ([]grantVersion, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT v.id,v.period_id,v.scheme_id,v.funding_source_id,v.version_no,v.scheme_name,v.source_name,
-  CAST(v.budget_idr AS CHAR),v.quota,v.duration_months,v.active_lecturer,v.min_jafung,v.manual_requirements,v.published_at
+  CAST(v.budget_idr AS CHAR),v.quota,v.duration_months,v.active_lecturer,v.require_nuptk,v.min_jafung,v.manual_requirements,v.published_at
   FROM grant_scheme_versions v JOIN grant_periods p ON p.id=v.period_id AND p.institution_id=v.institution_id
   WHERE v.institution_id=? AND (? OR (p.opens_at<=UTC_TIMESTAMP() AND p.closes_at>UTC_TIMESTAMP()
    AND v.version_no=(SELECT MAX(x.version_no) FROM grant_scheme_versions x WHERE x.institution_id=v.institution_id AND x.period_id=v.period_id AND x.scheme_id=v.scheme_id)))
@@ -140,7 +141,7 @@ func (s service) grantVersions(ctx context.Context, tenant int64, all bool) ([]g
 	items := []grantVersion{}
 	for rows.Next() {
 		var v grantVersion
-		if err := rows.Scan(&v.ID, &v.PeriodID, &v.SchemeID, &v.SourceID, &v.Version, &v.Scheme, &v.Source, &v.Budget, &v.Quota, &v.Duration, &v.ActiveLecturer, &v.MinJafung, &v.Manual, &v.PublishedAt); err != nil {
+		if err := rows.Scan(&v.ID, &v.PeriodID, &v.SchemeID, &v.SourceID, &v.Version, &v.Scheme, &v.Source, &v.Budget, &v.Quota, &v.Duration, &v.ActiveLecturer, &v.RequireNUPTK, &v.MinJafung, &v.Manual, &v.PublishedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, v)
@@ -213,6 +214,7 @@ func (s service) publishGrantVersion(c *gin.Context, a actor) {
 		Budget             string
 		Quota, Duration    int
 		ActiveLecturer     bool
+		RequireNUPTK       bool
 		MinJafung          string
 		Manual             string
 	}
@@ -249,8 +251,8 @@ func (s service) publishGrantVersion(c *gin.Context, a actor) {
 			return 0, err
 		}
 		result, err := tx.ExecContext(ctx, `INSERT INTO grant_scheme_versions
-   (institution_id,period_id,scheme_id,funding_source_id,version_no,scheme_name,source_name,budget_idr,quota,duration_months,active_lecturer,min_jafung,manual_requirements)
-   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, a.tenant, period, input.SchemeID, input.SourceID, version, scheme, source, budget, input.Quota, input.Duration, input.ActiveLecturer, input.MinJafung, input.Manual)
+   (institution_id,period_id,scheme_id,funding_source_id,version_no,scheme_name,source_name,budget_idr,quota,duration_months,active_lecturer,require_nuptk,min_jafung,manual_requirements)
+   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, a.tenant, period, input.SchemeID, input.SourceID, version, scheme, source, budget, input.Quota, input.Duration, input.ActiveLecturer, input.RequireNUPTK, input.MinJafung, input.Manual)
 		if err != nil {
 			return 0, err
 		}
@@ -266,13 +268,13 @@ func (s service) grantEligibility(c *gin.Context, a actor) {
 	}
 	ctx := c.Request.Context()
 	var periodID int64
-	var required, open, current bool
+	var required, requireNUPTK, open, current bool
 	var minJafung, manual string
-	err := s.db.QueryRowContext(ctx, `SELECT v.period_id,v.active_lecturer,v.min_jafung,v.manual_requirements,
+	err := s.db.QueryRowContext(ctx, `SELECT v.period_id,v.active_lecturer,v.require_nuptk,v.min_jafung,v.manual_requirements,
   p.opens_at<=UTC_TIMESTAMP() AND p.closes_at>UTC_TIMESTAMP(),
   v.version_no=(SELECT MAX(x.version_no) FROM grant_scheme_versions x WHERE x.institution_id=v.institution_id AND x.period_id=v.period_id AND x.scheme_id=v.scheme_id)
   FROM grant_scheme_versions v JOIN grant_periods p ON p.id=v.period_id AND p.institution_id=v.institution_id
-  WHERE v.institution_id=? AND v.id=?`, a.tenant, id).Scan(&periodID, &required, &minJafung, &manual, &open, &current)
+  WHERE v.institution_id=? AND v.id=?`, a.tenant, id).Scan(&periodID, &required, &requireNUPTK, &minJafung, &manual, &open, &current)
 	if err == sql.ErrNoRows {
 		c.Status(404)
 		return
@@ -285,10 +287,10 @@ func (s service) grantEligibility(c *gin.Context, a actor) {
 		c.Status(404)
 		return
 	}
-	var matches, active, withNUPTK, overdue int
+	var matches, active, withNUPTK, overdue, leaderCount int
 	var lecturerJafung string
 	if open && current {
-		if required || minJafung != "" {
+		if required || requireNUPTK || minJafung != "" {
 			if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*),COALESCE(SUM(is_active),0),
  COALESCE(SUM(is_active AND TRIM(nuptk)<>'' AND TRIM(nuptk)<>'-'),0),
  COALESCE(MAX(CASE WHEN is_active THEN jafung ELSE '' END),'')
@@ -303,13 +305,49 @@ func (s service) grantEligibility(c *gin.Context, a actor) {
 			c.Status(503)
 			return
 		}
+		var ldErr error
+		leaderCount, ldErr = countLeaderProposalsInPeriod(ctx, s.db, a.tenant, a.ID, periodID, 0)
+		if ldErr != nil {
+			c.Status(503)
+			return
+		}
 	}
-	result, reasons := assessEligibility(open, current, required, minJafung, manual, matches, active, withNUPTK, lecturerJafung, overdue)
+	result, reasons := assessEligibility(open, current, required, requireNUPTK, minJafung, manual, matches, active, withNUPTK, lecturerJafung, overdue, leaderCount)
 	c.JSON(http.StatusOK, gin.H{"result": result, "reasons": reasons})
 }
 
 type queryRower interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+func countLeaderProposalsInPeriod(ctx context.Context, q queryRower, tenant, userID, periodID, excludeProposalID int64) (int, error) {
+	var count int
+	err := q.QueryRowContext(ctx, `SELECT COUNT(*)
+ FROM research_proposals p
+ JOIN grant_scheme_versions v ON v.institution_id=p.institution_id AND v.id=p.grant_version_id
+ WHERE p.institution_id=? AND p.owner_user_id=? AND v.period_id=? AND p.id<>?
+   AND p.status<>'archived'
+   AND p.workflow_status NOT IN ('rejected_admin','rejected_review')
+   AND p.funding_decision<>'rejected'`, tenant, userID, periodID, excludeProposalID).Scan(&count)
+	return count, err
+}
+
+func countMemberProposalsInPeriod(ctx context.Context, q queryRower, tenant, lecturerID, periodID, excludeProposalID int64) (int, error) {
+	var lecturerUserID sql.NullInt64
+	if err := q.QueryRowContext(ctx, `SELECT user_id FROM lecturers WHERE institution_id=? AND id=?`, tenant, lecturerID).Scan(&lecturerUserID); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return 0, err
+	}
+	var count int
+	err := q.QueryRowContext(ctx, `SELECT COUNT(*)
+ FROM research_proposals p
+ JOIN grant_scheme_versions v ON v.institution_id=p.institution_id AND v.id=p.grant_version_id
+ JOIN proposal_member_consents c ON c.institution_id=p.institution_id AND c.proposal_id=p.id
+ WHERE p.institution_id=? AND c.lecturer_id=? AND v.period_id=? AND p.id<>?
+   AND p.status<>'archived'
+   AND p.workflow_status NOT IN ('rejected_admin','rejected_review')
+   AND p.funding_decision<>'rejected'
+   AND (? IS NULL OR p.owner_user_id<>?)`, tenant, lecturerID, periodID, excludeProposalID, lecturerUserID, lecturerUserID).Scan(&count)
+	return count, err
 }
 
 func countOverdueReports(ctx context.Context, q queryRower, tenant, userID, currentPeriodID int64) (int, error) {
@@ -327,7 +365,7 @@ func countOverdueReports(ctx context.Context, q queryRower, tenant, userID, curr
 	return overdue, err
 }
 
-func assessEligibility(open, current, required bool, minJafung, manual string, matches, active, withNUPTK int, lecturerJafung string, overdue int) (string, []string) {
+func assessEligibility(open, current, required, requireNUPTK bool, minJafung, manual string, matches, active, withNUPTK int, lecturerJafung string, overdue, leaderCount int) (string, []string) {
 	if !open || !current {
 		return "ineligible", []string{"Periode belum dibuka, sudah ditutup, atau versi ini sudah digantikan."}
 	}
@@ -337,7 +375,11 @@ func assessEligibility(open, current, required bool, minJafung, manual string, m
 		status = "ineligible"
 		reasons = append(reasons, fmt.Sprintf("Terdapat %d tunggakan laporan akhir penelitian/pengmas periode sebelumnya yang belum diselesaikan.", overdue))
 	}
-	if required || minJafung != "" {
+	if leaderCount > 0 {
+		status = "ineligible"
+		reasons = append(reasons, "Anda sudah tercatat sebagai Ketua pada 1 usulan di periode ini (maksimal 1 usulan sebagai Ketua per periode).")
+	}
+	if required || requireNUPTK || minJafung != "" {
 		switch {
 		case matches != 1:
 			status = "ineligible"
@@ -345,26 +387,27 @@ func assessEligibility(open, current, required bool, minJafung, manual string, m
 		case active != 1:
 			status = "ineligible"
 			reasons = append(reasons, "Status dosen tercatat nonaktif.")
-		case required && withNUPTK != 1:
+		case requireNUPTK && withNUPTK != 1:
 			status = "ineligible"
-			reasons = append(reasons, "NUPTK belum diisi. Lengkapi NUPTK pada menu Pengaturan → Profil Dosen.")
+			reasons = append(reasons, "Skema ini mewajibkan NUPTK. Lengkapi NUPTK pada Pengaturan → Profil Dosen, atau pilih skema Pemula.")
 		default:
 			if minJafung != "" && jafungRank(lecturerJafung) < jafungRank(minJafung) {
 				status = "ineligible"
 				reasons = append(reasons, fmt.Sprintf("Jabatan Fungsional minimal untuk skema ini adalah %s (jabatan Anda saat ini: %s). Perbarui di Pengaturan → Profil Dosen.", jafungLabel(minJafung), jafungLabel(lecturerJafung)))
 			} else {
-				reasons = append(reasons, fmt.Sprintf("Profil dosen terverifikasi (NUPTK terisi · Jafung: %s).", jafungLabel(lecturerJafung)))
+				nuptkInfo := "tanpa NUPTK"
+				if withNUPTK == 1 {
+					nuptkInfo = "NUPTK terisi"
+				}
+				reasons = append(reasons, fmt.Sprintf("Profil dosen memenuhi syarat (%s · Jafung: %s).", nuptkInfo, jafungLabel(lecturerJafung)))
 			}
 		}
 	}
 	if manual != "" {
-		if status == "eligible" {
-			status = "manual"
-		}
-		reasons = append(reasons, "Perlu verifikasi admin/LPPM: "+manual)
+		reasons = append(reasons, "Catatan syarat skema (diverifikasi LPPM setelah usulan diajukan): "+manual)
 	}
 	if len(reasons) == 0 {
-		reasons = append(reasons, "Periode terbuka dan skema tidak memiliki syarat tambahan.")
+		reasons = append(reasons, "Periode terbuka dan profil memenuhi syarat otomatis.")
 	}
 	return status, reasons
 }

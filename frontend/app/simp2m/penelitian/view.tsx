@@ -11,7 +11,16 @@ import { PrintPreviewModal } from "./print-views";
 
 type Mode = "production" | "trial-admin" | "trial-reader";
 type Institution = Choice & { active:boolean; canResearch:boolean };
-type Grant = { id:number; periodId:number; schemeId:number; scheme:string; source:string; version:number; budget:string; duration:number; activeLecturer:boolean; manual:string };
+type Grant = { id:number; periodId:number; schemeId:number; scheme:string; source:string; version:number; budget:string; duration:number; activeLecturer:boolean; requireNuptk?:boolean; minJafung?:string; manual:string };
+type EligibilityCheck = { result:"eligible"|"ineligible"|"manual"; reasons:string[] };
+const jafungLabels: Record<string, string> = {
+  "": "Semua jafung",
+  tenaga_pengajar: "Tenaga Pengajar",
+  asisten_ahli: "Asisten Ahli",
+  lektor: "Lektor",
+  lektor_kepala: "Lektor Kepala",
+  guru_besar: "Guru Besar",
+};
 type Options = { periods:Choice[]; versions:Grant[]; fields:Choice[]; lecturers:Choice[]; students:Choice[]; budgetCategories:Choice[]; targetYears?:Choice[]; canVerify:boolean };
 type ApprovalEntry = { id:number; fromStatus:string; toStatus:string; actorName:string; roleName:string; note:string; revision:number; createdAt:string };
 type PublicReview = { id:number; totalScore:number; recommendation:string; publicComment:string; submittedAt:string };
@@ -56,7 +65,9 @@ export function ResearchPanel(){
   const [tenant,setTenant]=useState(0);
   const [items,setItems]=useState<Proposal[]>();
   const [options,setOptions]=useState<Options>(emptyOptions);
+  const [selectedPeriod,setSelectedPeriod]=useState(0);
   const [grant,setGrant]=useState(0);
+  const [eligibilityMap,setEligibilityMap]=useState<Record<number,EligibilityCheck>>({});
   const [proposal,setProposal]=useState<Proposal>();
   const [draft,setDraft]=useState<DraftInput>({title:"",fieldId:null,data:{}});
   const [step,setStep]=useState(0);
@@ -74,6 +85,8 @@ export function ResearchPanel(){
   const dirty=changed!==saved;
   const base=mode==="production"?"/api/v1/iam":`/api/v1/trial/${mode}/iam`;
   const endpoint=`${base}/institutions/${tenant}/research`;
+  const activePeriod=selectedPeriod && options.periods.some(p=>p.id===selectedPeriod) ? selectedPeriod : (options.periods[0]?.id ?? 0);
+  const periodVersions=options.versions.filter(item=>item.periodId===activePeriod);
   const selectedGrant=options.versions.find(item=>item.id===grant);
   const currentGrant=options.versions.find(item=>item.periodId===proposal?.periodId&&item.schemeId===proposal?.schemeId);
   const isRevision=proposal?.status==="submitted"&&(proposal.workflowStatus==="admin_revision"||proposal.workflowStatus==="review_revision");
@@ -106,13 +119,30 @@ export function ResearchPanel(){
         setOptions(choices);
         setInvitations(invites);
         setGrant(previous=>choices.versions.some(item=>item.id===previous)?previous:0);
+        if(choices.versions.length){
+          const checks=await Promise.all(
+            choices.versions.map(async v=>{
+              try{
+                const res=await api<EligibilityCheck>(`${base}/institutions/${tenant}/grants/versions/${v.id}/eligibility`,{signal:controller.signal});
+                return [v.id,res] as const;
+              }catch{
+                return null;
+              }
+            })
+          );
+          if(!controller.signal.aborted){
+            const nextMap:Record<number,EligibilityCheck>={};
+            for(const entry of checks){if(entry)nextMap[entry[0]]=entry[1];}
+            setEligibilityMap(nextMap);
+          }
+        }
         if(choices.canVerify){
           const queue=await api<VerificationRequest[]>(endpoint+"/verification",{signal:controller.signal});
           if(!controller.signal.aborted)setRequests(queue);
         }
       }).catch((err:Error)=>{if(!controller.signal.aborted)setError(err.message);});
     return ()=>controller.abort();
-  },[endpoint,tenant,revision]);
+  },[base,endpoint,tenant,revision]);
 
   useEffect(()=>{
     if(!dirty)return;
@@ -224,18 +254,54 @@ export function ResearchPanel(){
 
       {!proposal&&tenant>0&&mode!=="trial-reader"&&<Card className="workspace-panel rounded-md">
         <CardHeader><CardTitle>Buat usulan dari hibah terbuka</CardTitle></CardHeader>
-        <CardContent className="workspace-fields space-y-2">
-          <label htmlFor="research-grant" className="block">Periode dan skema</label>
-          <select id="research-grant" className="w-full" value={grant} disabled={pending} onChange={event=>setGrant(Number(event.target.value))}>
-            <option value={0}>{options.versions.length?"Pilih skema":"Belum ada skema terbuka"}</option>
-            {options.versions.map(item=><option key={item.id} value={item.id}>{options.periods.find(period=>period.id===item.periodId)?.name} · {item.scheme} · versi {item.version}</option>)}
-          </select>
-          {selectedGrant&&<div className="space-y-1 text-xs text-muted-foreground">
-            <p>{selectedGrant.source} · Pagu {money.format(BigInt(selectedGrant.budget))} · {selectedGrant.duration} bulan</p>
-            {selectedGrant.activeLecturer&&<p>Pengusul wajib dosen aktif.</p>}
-            {selectedGrant.manual&&<p className="break-words">Syarat verifikasi LPPM · {selectedGrant.manual}</p>}
+        <CardContent className="workspace-fields space-y-3">
+          <div className="min-w-0">
+            <label htmlFor="research-period" className="mb-1 block">1. Pilih Periode Hibah</label>
+            <select id="research-period" className="w-full" value={activePeriod} disabled={pending||!options.periods.length} onChange={event=>{setSelectedPeriod(Number(event.target.value));setGrant(0);}}>
+              {!options.periods.length&&<option value={0}>Belum ada periode hibah terbuka</option>}
+              {options.periods.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          {activePeriod>0&&<div className="space-y-2">
+            <p className="text-sm font-medium">2. Pilih Skema dalam Periode Ini (cek kelayakan otomatis)</p>
+            {periodVersions.length===0&&<p className="text-xs text-muted-foreground">Belum ada skema diterbitkan pada periode ini.</p>}
+            <div className="grid gap-2 sm:grid-cols-2">
+              {periodVersions.map(item=>{
+                const check=eligibilityMap[item.id];
+                const eligible=check ? check.result!=="ineligible" : true;
+                const chosen=grant===item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    disabled={pending}
+                    onClick={()=>setGrant(item.id)}
+                    className={`rounded-md border p-3 text-left transition ${chosen?"border-primary bg-primary/5 ring-1 ring-primary":"border-border hover:bg-muted/40"}`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-medium text-sm">{item.scheme} · v{item.version}</span>
+                      {check&&<span className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium ${eligible?"bg-emerald-500/15 text-emerald-700 dark:text-emerald-300":"bg-destructive/15 text-destructive"}`}>
+                        {eligible?"Memenuhi syarat":"Tidak memenuhi syarat"}
+                      </span>}
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {item.source} · Pagu {money.format(BigInt(item.budget))} · {item.duration} bln
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {item.requireNuptk?"Wajib NUPTK":"Tanpa NUPTK (Pemula)"} · Min. {jafungLabels[item.minJafung ?? ""] ?? item.minJafung}
+                    </p>
+                    {check&&check.reasons.length>0&&<ul className="mt-1.5 list-inside list-disc space-y-0.5 text-[11px] text-muted-foreground">
+                      {check.reasons.map(reason=><li key={reason}>{reason}</li>)}
+                    </ul>}
+                  </button>
+                );
+              })}
+            </div>
           </div>}
-          <Button size="sm" disabled={!grant||pending} onClick={()=>void run(async()=>{
+          {selectedGrant&&eligibilityMap[selectedGrant.id]?.result==="ineligible"&&<p role="alert" className="text-xs text-destructive">
+            Skema yang dipilih belum memenuhi syarat kelayakan Anda. Pilih skema lain (misalnya skema Pemula) atau lengkapi NUPTK &amp; Jabatan Fungsional di Pengaturan.
+          </p>}
+          <Button size="sm" disabled={!grant||pending||eligibilityMap[grant]?.result==="ineligible"} onClick={()=>void run(async()=>{
             const response=await api<{id:number}>(endpoint,json("POST",{grantVersionId:grant}));
             show(await api<Proposal>(`${endpoint}/${response.id}`));
             setRevision(previous=>previous+1);
@@ -252,6 +318,15 @@ export function ResearchPanel(){
           <p className="mt-1 text-xs text-muted-foreground">{proposal.period} · Skema versi {proposal.grantVersion} · Ketua {proposal.owner} · {proposal.status==="submitted"?`Nomor usulan ${proposal.id}`:"Draf"}</p>
         </CardHeader>
         <CardContent className="workspace-fields space-y-3">
+          {isRevision&&<div role="alert" className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+            <p className="font-semibold text-amber-800 dark:text-amber-300">Usulan perlu direvisi</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {proposal.workflowStatus==="admin_revision"?"Admin LPPM meminta revisi kelengkapan usulan.":"Reviewer meminta revisi substansi usulan."} Silakan perbaiki isian di bawah, simpan, lalu klik <strong>Kirim ulang revisi</strong>.
+            </p>
+            {!!proposal.approvals?.length&&proposal.approvals[proposal.approvals.length-1]?.note&&<p className="mt-1 text-xs font-medium">
+              Catatan terbaru: {proposal.approvals[proposal.approvals.length-1].note}
+            </p>}
+          </div>}
           {writable&&currentGrant&&currentGrant.id!==proposal.grantVersionId&&<div className="rounded-md border border-border p-2 text-sm">
             <p>Versi skema {currentGrant.version} tersedia. Tinjau aturan terbaru sebelum mengirim draf.</p>
             <Button size="sm" variant="outline" className="mt-2" disabled={scopeLocked} onClick={()=>void run(async()=>{
@@ -364,15 +439,6 @@ export function ResearchPanel(){
               </details>}
             </div>}
             {writable&&<>
-              {proposal.requiresVerification&&proposal.status==="draft"&&<div className="rounded border border-border p-2">
-                <p>{proposal.verification==="verified"?"Syarat manual telah diverifikasi.":proposal.verification==="requested"?"Menunggu verifikasi syarat dari LPPM.":"Jika syarat tidak dapat diperiksa otomatis, ajukan verifikasi LPPM."}</p>
-                {proposal.verification==="none"&&<Button size="sm" variant="outline" className="mt-2" disabled={scopeLocked} onClick={()=>void run(async()=>{
-                  await api(`${endpoint}/${proposal.id}/verification`,json("POST",{revision:proposal.revision}));
-                  setProposal(await api<Proposal>(`${endpoint}/${proposal.id}`));
-                  setRevision(previous=>previous+1);
-                  toast.success("Permintaan verifikasi dikirim.",workspaceToastOptions);
-                })}>Ajukan verifikasi syarat</Button>}
-              </div>}
               <label className="flex items-start gap-2"><input type="checkbox" checked={confirmed} disabled={pending} onChange={event=>setConfirmed(event.target.checked)} /> Saya sudah memeriksa isi usulan dan menyatakan data yang diajukan benar.</label>
               {isRevision ? (
                 <Button size="sm" disabled={scopeLocked||!confirmed} onClick={()=>void run(async()=>{

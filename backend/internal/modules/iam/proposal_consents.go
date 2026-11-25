@@ -152,8 +152,8 @@ func (s service) listInvitations(c *gin.Context, a actor) {
  JOIN grant_scheme_versions v ON v.institution_id=p.institution_id AND v.id=p.grant_version_id
  JOIN grant_periods g ON g.institution_id=v.institution_id AND g.id=v.period_id
  JOIN users u ON u.id=p.owner_user_id
- WHERE c.institution_id=? AND l.email=? AND p.status<>'archived'
- ORDER BY (c.status='pending') DESC, p.updated_at DESC`, a.tenant, a.Email)
+ WHERE c.institution_id=? AND (l.user_id=? OR (l.user_id IS NULL AND l.email=?)) AND p.status<>'archived'
+ ORDER BY (c.status='pending') DESC, p.updated_at DESC`, a.tenant, a.ID, a.Email)
 	if err != nil {
 		c.Status(503)
 		return
@@ -224,11 +224,29 @@ func (s service) respondConsent(c *gin.Context, a actor) {
 		if propStatus != "draft" {
 			return 0, staleProposal
 		}
+		if status == "approved" {
+			var lecturerID, periodID int64
+			if err := tx.QueryRowContext(ctx, `SELECT c.lecturer_id, v.period_id
+ FROM proposal_member_consents c
+ JOIN lecturers l ON l.institution_id=c.institution_id AND l.id=c.lecturer_id
+ JOIN research_proposals p ON p.institution_id=c.institution_id AND p.id=c.proposal_id
+ JOIN grant_scheme_versions v ON v.institution_id=p.institution_id AND v.id=p.grant_version_id
+ WHERE c.institution_id=? AND c.proposal_id=? AND (l.user_id=? OR (l.user_id IS NULL AND l.email=?)) AND l.is_active`,
+				a.tenant, id, a.ID, a.Email).Scan(&lecturerID, &periodID); err == nil {
+				count, err := countMemberProposalsInPeriod(ctx, tx, a.tenant, lecturerID, periodID, id)
+				if err != nil {
+					return 0, err
+				}
+				if count > 0 {
+					return 0, fmt.Errorf("%w: Anda sudah menjadi Anggota pada 1 usulan lain di periode ini", invalidProposal)
+				}
+			}
+		}
 		res, err := tx.ExecContext(ctx, `UPDATE proposal_member_consents c
  JOIN lecturers l ON l.institution_id=c.institution_id AND l.id=c.lecturer_id
  SET c.status=?, c.note=?, c.responded_at=UTC_TIMESTAMP(6)
- WHERE c.institution_id=? AND c.proposal_id=? AND l.email=? AND l.is_active`,
-			status, note, a.tenant, id, a.Email)
+ WHERE c.institution_id=? AND c.proposal_id=? AND (l.user_id=? OR (l.user_id IS NULL AND l.email=?)) AND l.is_active`,
+			status, note, a.tenant, id, a.ID, a.Email)
 		if err != nil {
 			return 0, err
 		}
