@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { workspaceToastOptions } from "../confirm-removal";
+import { confirmRemoval, workspaceToastOptions } from "../confirm-removal";
 
 type Mode = "production" | "trial-admin" | "trial-reader";
 type Choice = { id: number; name: string };
@@ -152,9 +152,12 @@ export function GrantPanel() {
         budget: fields.get("budget"), quota: Number(fields.get("quota")), duration: Number(fields.get("duration")),
         activeLecturer: fields.has("activeLecturer"), requireNuptk: fields.has("requireNuptk"), minJafung: fields.get("minJafung"), manual: fields.get("manual"),
       };
-      const path = kind === "period" ? "/periods" + (editingPeriod ? `/${editingPeriod.id}` : "") : `/periods/${period}/versions`;
+      const path = kind === "period"
+        ? "/periods" + (editingPeriod ? `/${editingPeriod.id}` : "")
+        : previous ? `/versions/${previous.id}` : `/periods/${period}/versions`;
+      const method = (kind === "period" && editingPeriod) || (kind === "version" && previous) ? "PUT" : "POST";
       const response = await api<{id:number}>(endpoint + path, {
-        method: kind === "period" && editingPeriod ? "PUT" : "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(payload),
+        method, headers: {"Content-Type":"application/json"}, body: JSON.stringify(payload),
       });
       if (kind === "period") {
         setCreate(false);
@@ -164,10 +167,31 @@ export function GrantPanel() {
         setRevisionForm(undefined);
         setAnswers({});
       }
-      setRevision(previous => previous + 1);
-      toast.success(kind === "period" ? "Periode hibah disimpan." : "Versi skema diterbitkan.", workspaceToastOptions);
+      setRevision(previousRevision => previousRevision + 1);
+      toast.success(
+        kind === "period" ? "Periode hibah disimpan." : previous ? "Skema hibah diperbarui." : "Skema hibah ditambahkan.",
+        workspaceToastOptions,
+      );
     } catch (err) {
       const message = err instanceof Error ? err.message : "Perubahan gagal disimpan.";
+      setError(message);
+      toast.error(message, workspaceToastOptions);
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function removeScheme(item: Version) {
+    if (!await confirmRemoval("Hapus skema?", `Skema "${item.scheme}" akan dihapus dari periode ini.`)) return;
+    setPending(true);
+    setError("");
+    try {
+      await api(`${endpoint}/versions/${item.id}`, { method: "DELETE" });
+      if (previous?.id === item.id) setRevisionForm(undefined);
+      setRevision(previousRevision => previousRevision + 1);
+      toast.success("Skema hibah dihapus.", workspaceToastOptions);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Skema gagal dihapus.";
       setError(message);
       toast.error(message, workspaceToastOptions);
     } finally {
@@ -258,13 +282,13 @@ export function GrantPanel() {
           <p className="text-xs text-muted-foreground">{selected.code} · Usulan {selected.proposalYear} · Pelaksanaan {selected.projectYear} · Anggaran {selected.budgetYear}</p>
           <div className="flex flex-wrap gap-2">
             {overview?.canManage && !versions.length && !create && <Button size="sm" variant="outline" disabled={pending} onClick={() => {setRevisionForm(undefined);setEditingPeriod(selected);setCreate(true);}}>Ubah periode</Button>}
-            {overview?.canManage && selected.state !== "closed" && !revisionForm && <Button size="sm" variant="outline" disabled={pending} onClick={() => {setCreate(false);setRevisionForm({});}}>Atur skema</Button>}
+            {overview?.canManage && selected.state !== "closed" && !revisionForm && <Button size="sm" variant="outline" disabled={pending} onClick={() => {setCreate(false);setRevisionForm({});}}>Tambah skema</Button>}
           </div>
         </CardContent>
       </Card>}
 
       {revisionForm && options && selected && <Card className="workspace-panel rounded-md">
-        <CardHeader><CardTitle>{previous ? `Versi baru · ${previous.scheme}` : "Terbitkan skema untuk periode ini"}</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{previous ? `Edit skema · ${previous.scheme}` : "Tambah skema untuk periode ini"}</CardTitle></CardHeader>
         <CardContent>
           {(!options.schemes.length || !options.sources.length) && <p role="status" className="mb-3 text-sm">Tambahkan skema dan sumber dana aktif di Master Data sebelum menerbitkan.</p>}
           <form key={`${period}:${previous?.id ?? "new"}`} method="post" onSubmit={event => void submit(event,"version")} className="workspace-fields grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -292,7 +316,7 @@ export function GrantPanel() {
               <textarea id="manual" name="manual" rows={3} maxLength={1000} defaultValue={previous?.manual} className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm" />
             </div>
             <div className="workspace-form-actions"><Button type="button" variant="outline" disabled={pending} onClick={() => setRevisionForm(undefined)}>Batal</Button>
-              <Button disabled={pending || !options.schemes.length || !options.sources.length}>Terbitkan versi</Button>
+              <Button disabled={pending || !options.schemes.length || !options.sources.length}>{previous ? "Simpan perubahan" : "Simpan skema"}</Button>
             </div>
           </form>
         </CardContent>
@@ -303,7 +327,7 @@ export function GrantPanel() {
         {latest.map(item => <Card key={item.id} className="workspace-panel min-w-0 rounded-md">
           <CardHeader><CardTitle>{item.scheme}</CardTitle></CardHeader>
           <CardContent className="space-y-2">
-            <p className="text-sm">{item.source} · Versi {item.version}</p>
+            <p className="text-sm">{item.source}</p>
             <dl className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">
               <div><dt className="text-muted-foreground">Pagu</dt><dd className="break-words font-medium">{rupiah.format(BigInt(item.budget))}</dd></div>
               <div><dt className="text-muted-foreground">Kuota</dt><dd>{item.quota}</dd></div>
@@ -315,17 +339,13 @@ export function GrantPanel() {
             {item.manual && <p className="whitespace-pre-wrap break-words text-xs text-muted-foreground">{item.manual}</p>}
             <div className="flex flex-wrap gap-2">
               {selected.state === "open" && <Button size="sm" variant="outline" disabled={pending} onClick={() => void check(item.id)}>Cek kelayakan saya</Button>}
-              {overview?.canManage && selected.state !== "closed" && <Button size="sm" variant="outline" disabled={pending} onClick={() => setRevisionForm({previous:item})}>Buat versi baru</Button>}
+              {overview?.canManage && selected.state !== "closed" && <Button size="sm" variant="outline" disabled={pending} onClick={() => setRevisionForm({previous:item})}>Edit</Button>}
+              {overview?.canManage && selected.state !== "closed" && <Button size="sm" variant="ghost" className="text-destructive" disabled={pending} onClick={() => void removeScheme(item)}>Hapus</Button>}
             </div>
             {answers[item.id] && <div className="rounded-md border border-border bg-background p-2 text-sm" role="status">
               <strong>{verdictLabels[answers[item.id].result]}</strong>
               <ul className="mt-1 list-inside list-disc text-muted-foreground">{answers[item.id].reasons.map(reason => <li key={reason}>{reason}</li>)}</ul>
             </div>}
-            {overview?.canManage && versions.some(version => version.schemeId === item.schemeId && version.id !== item.id) && <details className="text-xs text-muted-foreground">
-              <summary className="cursor-pointer text-brand">Riwayat versi</summary>
-              <ul className="mt-2 space-y-1">{versions.filter(version => version.schemeId === item.schemeId && version.id !== item.id).map(version =>
-                <li key={version.id}>Versi {version.version} · {version.source} · {rupiah.format(BigInt(version.budget))} · kuota {version.quota} · {version.duration} bulan · {localDate.format(new Date(version.publishedAt))} WIB{version.activeLecturer ? " · wajib dosen aktif" : ""}{version.requireNuptk ? " · wajib NUPTK" : " · tanpa NUPTK"}{version.minJafung ? ` · min. ${jafungLabels[version.minJafung] ?? version.minJafung}` : ""}{version.manual ? ` · ${version.manual}` : ""}</li>)}</ul>
-            </details>}
           </CardContent>
         </Card>)}
       </div>}

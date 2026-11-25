@@ -203,24 +203,21 @@ func (s service) saveGrantPeriod(c *gin.Context, a actor) {
 	})
 }
 
-func (s service) publishGrantVersion(c *gin.Context, a actor) {
-	period, err := strconv.ParseInt(c.Param("period"), 10, 64)
-	if err != nil || period < 1 {
-		c.Status(400)
-		return
-	}
-	var input struct {
-		SchemeID, SourceID int64
-		Budget             string
-		Quota, Duration    int
-		ActiveLecturer     bool
-		RequireNUPTK       bool
-		MinJafung          string
-		Manual             string
-	}
+type grantVersionInput struct {
+	SchemeID, SourceID int64
+	Budget             string
+	Quota, Duration    int
+	ActiveLecturer     bool
+	RequireNUPTK       bool
+	MinJafung          string
+	Manual             string
+}
+
+func parseGrantVersionInput(c *gin.Context) (grantVersionInput, uint64, bool) {
+	var input grantVersionInput
 	if c.ShouldBindJSON(&input) != nil {
 		c.Status(400)
-		return
+		return input, 0, false
 	}
 	budget, err := strconv.ParseUint(input.Budget, 10, 63)
 	input.Manual = strings.TrimSpace(input.Manual)
@@ -228,6 +225,19 @@ func (s service) publishGrantVersion(c *gin.Context, a actor) {
 	if err != nil || input.SchemeID < 1 || input.SourceID < 1 || input.Quota < 1 || input.Quota > 1000000 ||
 		input.Duration < 1 || input.Duration > 120 || len(input.Manual) > 2000 || !validJafungValues[input.MinJafung] {
 		c.Status(400)
+		return input, 0, false
+	}
+	return input, budget, true
+}
+
+func (s service) publishGrantVersion(c *gin.Context, a actor) {
+	period, err := strconv.ParseInt(c.Param("period"), 10, 64)
+	if err != nil || period < 1 {
+		c.Status(400)
+		return
+	}
+	input, budget, ok := parseGrantVersionInput(c)
+	if !ok {
 		return
 	}
 	s.change(c, a, "grants.scheme.publish", func(ctx context.Context, tx *sql.Tx) (int64, error) {
@@ -257,6 +267,73 @@ func (s service) publishGrantVersion(c *gin.Context, a actor) {
 			return 0, err
 		}
 		return result.LastInsertId()
+	})
+}
+
+func (s service) updateGrantVersion(c *gin.Context, a actor) {
+	id := target(c)
+	if id < 1 {
+		c.Status(400)
+		return
+	}
+	input, budget, ok := parseGrantVersionInput(c)
+	if !ok {
+		return
+	}
+	s.change(c, a, "grants.scheme.update", func(ctx context.Context, tx *sql.Tx) (int64, error) {
+		var closed bool
+		if err := tx.QueryRowContext(ctx, `SELECT p.closes_at<=UTC_TIMESTAMP()
+ FROM grant_scheme_versions v
+ JOIN grant_periods p ON p.institution_id=v.institution_id AND p.id=v.period_id
+ WHERE v.institution_id=? AND v.id=? FOR UPDATE`, a.tenant, id).Scan(&closed); err != nil {
+			return 0, err
+		}
+		if closed {
+			return 0, invalid
+		}
+		var scheme, source string
+		if err := tx.QueryRowContext(ctx, "SELECT name FROM schemes WHERE institution_id=? AND id=? AND is_active", a.tenant, input.SchemeID).Scan(&scheme); err != nil {
+			return 0, err
+		}
+		if err := tx.QueryRowContext(ctx, "SELECT name FROM funding_sources WHERE institution_id=? AND id=? AND is_active", a.tenant, input.SourceID).Scan(&source); err != nil {
+			return 0, err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE grant_scheme_versions
+ SET scheme_id=?, funding_source_id=?, scheme_name=?, source_name=?, budget_idr=?, quota=?, duration_months=?, active_lecturer=?, require_nuptk=?, min_jafung=?, manual_requirements=?
+ WHERE institution_id=? AND id=?`,
+			input.SchemeID, input.SourceID, scheme, source, budget, input.Quota, input.Duration, input.ActiveLecturer, input.RequireNUPTK, input.MinJafung, input.Manual, a.tenant, id); err != nil {
+			return 0, err
+		}
+		return id, nil
+	})
+}
+
+func (s service) deleteGrantVersion(c *gin.Context, a actor) {
+	id := target(c)
+	if id < 1 {
+		c.Status(400)
+		return
+	}
+	s.change(c, a, "grants.scheme.delete", func(ctx context.Context, tx *sql.Tx) (int64, error) {
+		var used int
+		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM research_proposals WHERE institution_id=? AND grant_version_id=?", a.tenant, id).Scan(&used); err != nil {
+			return 0, err
+		}
+		if used > 0 {
+			return 0, fmt.Errorf("%w: skema tidak dapat dihapus karena sudah digunakan pada usulan penelitian", invalidProposal)
+		}
+		res, err := tx.ExecContext(ctx, "DELETE FROM grant_scheme_versions WHERE institution_id=? AND id=?", a.tenant, id)
+		if err != nil {
+			return 0, err
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return 0, err
+		}
+		if n == 0 {
+			return 0, sql.ErrNoRows
+		}
+		return id, nil
 	})
 }
 

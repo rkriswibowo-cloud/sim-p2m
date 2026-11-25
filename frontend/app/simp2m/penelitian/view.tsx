@@ -491,11 +491,11 @@ export function ResearchPanel() {
                 show(await api<Proposal>(`${endpoint}/${proposal.id}`));
               })}>Muat ulang draf</Button>}
               <Button size="sm" variant="ghost" className="text-destructive" disabled={scopeLocked} onClick={() => void run(async () => {
-                if (!await confirmRemoval("Hapus draf?", "Draf akan dikeluarkan dari daftar usulan.")) return;
+                if (!await confirmRemoval("Batalkan draf usulan?", "Draf akan dibatalkan dan dikeluarkan dari daftar usulan.")) return;
                 await api(`${endpoint}/${proposal.id}`, json("DELETE", { revision: proposal.revision }));
                 setProposal(undefined); setRevision(previous => previous + 1);
-                toast.success("Draf dihapus.", workspaceToastOptions);
-              })}>Hapus draf</Button>
+                toast.success("Draf usulan dibatalkan.", workspaceToastOptions);
+              })}>Batalkan draf</Button>
             </div>
           </div>}
         </CardContent>
@@ -559,7 +559,18 @@ export function ResearchPanel() {
             <div className="min-w-0"><p className="break-words text-sm font-medium">{item.title || "Draf tanpa judul"}</p>
               <p className="text-xs text-muted-foreground">{item.scheme} · {item.period} · {item.status === "submitted" ? `Dikirim #${item.id}` : "Draf"}</p>
             </div>
-            <Button size="sm" variant="outline" disabled={scopeLocked} onClick={() => void run(async () => show(await api<Proposal>(`${endpoint}/${item.id}`)))}>Buka</Button>
+            <div className="flex flex-wrap gap-2">
+              {item.status === "draft" && mode !== "trial-reader" && (
+                <Button size="sm" variant="ghost" className="text-destructive" disabled={scopeLocked} onClick={() => void run(async () => {
+                  if (!await confirmRemoval("Batalkan draf usulan?", "Draf usulan ini akan dibatalkan dan dikeluarkan dari daftar.")) return;
+                  await api(`${endpoint}/${item.id}`, json("DELETE", { revision: item.revision }));
+                  if (proposal?.id === item.id) setProposal(undefined);
+                  setRevision(previous => previous + 1);
+                  toast.success("Draf usulan dibatalkan.", workspaceToastOptions);
+                })}>Batalkan</Button>
+              )}
+              <Button size="sm" variant="outline" disabled={scopeLocked} onClick={() => void run(async () => show(await api<Proposal>(`${endpoint}/${item.id}`)))}>Buka</Button>
+            </div>
           </div>)}
         </CardContent>
       </Card>
