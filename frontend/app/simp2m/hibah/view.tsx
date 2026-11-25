@@ -281,7 +281,7 @@ export function GrantPanel() {
           <p className="text-sm">{localDate.format(new Date(selected.opensAt))} – {localDate.format(new Date(selected.closesAt))} WIB</p>
           <p className="text-xs text-muted-foreground">{selected.code} · Usulan {selected.proposalYear} · Pelaksanaan {selected.projectYear} · Anggaran {selected.budgetYear}</p>
           <div className="flex flex-wrap gap-2">
-            {overview?.canManage && !versions.length && !create && <Button size="sm" variant="outline" disabled={pending} onClick={() => {setRevisionForm(undefined);setEditingPeriod(selected);setCreate(true);}}>Ubah periode</Button>}
+            {overview?.canManage && !create && <Button size="sm" variant="outline" disabled={pending} onClick={() => {setRevisionForm(undefined);setEditingPeriod(selected);setCreate(true);}}>Edit periode</Button>}
             {overview?.canManage && selected.state !== "closed" && !revisionForm && <Button size="sm" variant="outline" disabled={pending} onClick={() => {setCreate(false);setRevisionForm({});}}>Tambah skema</Button>}
           </div>
         </CardContent>

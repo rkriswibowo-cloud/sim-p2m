@@ -183,13 +183,6 @@ func (s service) saveGrantPeriod(c *gin.Context, a actor) {
 			if err := tx.QueryRowContext(ctx, "SELECT id FROM grant_periods WHERE institution_id=? AND id=? FOR UPDATE", a.tenant, id).Scan(&locked); err != nil {
 				return 0, err
 			}
-			var published bool
-			if err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM grant_scheme_versions WHERE institution_id=? AND period_id=?)", a.tenant, id).Scan(&published); err != nil {
-				return 0, err
-			}
-			if published {
-				return 0, publishedPeriod
-			}
 			_, err := tx.ExecContext(ctx, `UPDATE grant_periods SET code=?,name=?,proposal_year=?,project_year=?,budget_year=?,opens_at=?,closes_at=?
 			 WHERE institution_id=? AND id=?`, input.Code, input.Name, input.ProposalYear, input.ProjectYear, input.BudgetYear, input.OpensAt.UTC(), input.ClosesAt.UTC(), a.tenant, id)
 			return id, err
