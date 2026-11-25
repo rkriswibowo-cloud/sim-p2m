@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { confirmRemoval, workspaceToastOptions } from "../confirm-removal";
+import { getMinOutputInfo } from "../scheme-output-info";
 
 type Mode = "production" | "trial-admin" | "trial-reader";
 type Choice = { id: number; name: string };
@@ -336,6 +337,7 @@ export function GrantPanel() {
             {item.activeLecturer && <p className="text-xs text-muted-foreground">Wajib berstatus dosen aktif.</p>}
             <p className="text-xs text-muted-foreground">{item.requireNuptk ? "Wajib memiliki NUPTK." : "Dapat diikuti tanpa NUPTK (skema pemula)."}</p>
             {item.minJafung && <p className="text-xs text-muted-foreground">Jabatan fungsional minimal: {jafungLabels[item.minJafung] ?? item.minJafung}.</p>}
+            {getMinOutputInfo(item.scheme) && <p className="text-xs text-muted-foreground">Minimal luaran: {getMinOutputInfo(item.scheme)}.</p>}
             {item.manual && <p className="whitespace-pre-wrap break-words text-xs text-muted-foreground">{item.manual}</p>}
             <div className="flex flex-wrap gap-2">
               {selected.state === "open" && <Button size="sm" variant="outline" disabled={pending} onClick={() => void check(item.id)}>Cek kelayakan saya</Button>}

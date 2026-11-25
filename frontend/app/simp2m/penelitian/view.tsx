@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { confirmRemoval, workspaceToastOptions } from "../confirm-removal";
+import { getMinOutputInfo } from "../scheme-output-info";
 import { ProposalFields, steps } from "./proposal-fields";
 import type { Choice, MemberConsent, ProposalData } from "./proposal-fields";
 import { PrintPreviewModal } from "./print-views";
@@ -294,6 +295,11 @@ export function ResearchPanel() {
                     <p className="mt-0.5 text-xs text-muted-foreground">
                       {item.requireNuptk ? "Wajib NUPTK" : "Tanpa NUPTK (Pemula)"} · Min. {jafungLabels[item.minJafung ?? ""] ?? item.minJafung}
                     </p>
+                    {getMinOutputInfo(item.scheme) && (
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">
+                        Minimal luaran: {getMinOutputInfo(item.scheme)}
+                      </p>
+                    )}
                     {check && check.reasons.length > 0 && <ul className="mt-1.5 list-inside list-disc space-y-0.5 text-[11px] text-muted-foreground">
                       {check.reasons.map(reason => <li key={reason}>{reason}</li>)}
                     </ul>}
@@ -341,6 +347,11 @@ export function ResearchPanel() {
             <Button size="sm" variant="outline" disabled={scopeLocked} onClick={() => { setProposal(undefined); setError(""); }}>Kembali ke daftar</Button>
           </div>
           <p className="mt-1 text-xs text-muted-foreground">{proposal.period} · Skema versi {proposal.grantVersion} · Ketua {proposal.owner} · {proposal.status === "submitted" ? `Nomor usulan ${proposal.id}` : "Draf"}</p>
+          {getMinOutputInfo(proposal.scheme) && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              <strong>Informasi Minimal Luaran ({proposal.scheme}):</strong> {getMinOutputInfo(proposal.scheme)}
+            </p>
+          )}
         </CardHeader>
         <CardContent className="workspace-fields space-y-3">
           {isRevision && <div role="alert" className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
