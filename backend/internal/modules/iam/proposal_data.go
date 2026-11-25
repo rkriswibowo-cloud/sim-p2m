@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"html"
 	"math/big"
 	"regexp"
 	"strings"
@@ -138,14 +139,17 @@ func (data proposalData) validateSubmission(title string, fieldID *int64, grant 
 	if startErr != nil || endErr != nil || ends.Before(starts) || ends.After(starts.AddDate(0, grant.duration, 0)) {
 		return fmt.Errorf("tanggal kegiatan harus berurutan dalam durasi skema %d bulan", grant.duration)
 	}
-	if !filled(data.Roadmap, data.Summary, data.Introduction, data.Literature, data.Method, data.Expected, data.References) {
+	if !filledHTML(data.Roadmap, data.Summary, data.Introduction, data.Literature, data.Method, data.Expected, data.References) {
 		return errors.New("lengkapi roadmap, ringkasan, pendahuluan, tinjauan pustaka, metode, hasil diharapkan, dan daftar pustaka")
 	}
-	if len(strings.Fields(data.Introduction)) > 1000 {
+	if len(strings.Fields(stripHTMLTags(data.Introduction))) > 1000 {
 		return errors.New("pendahuluan maksimal 1.000 kata")
 	}
 	if len(data.Keywords) != 5 || !filled(data.Keywords...) {
 		return errors.New("isi lima kata kunci")
+	}
+	if len(data.Team) < 1 || len(data.Team) > 3 {
+		return errors.New("penelitian minimal beranggotakan 1 orang dosen dan maksimal 3 orang dosen")
 	}
 	for _, member := range data.Team {
 		if member.ID < 1 || member.Hours < 1 || member.Hours > 168 || !filled(member.Expertise, member.Task) {
@@ -160,10 +164,18 @@ func (data proposalData) validateSubmission(title string, fieldID *int64, grant 
 	if len(data.Outputs) == 0 || len(data.Costs) == 0 || len(data.Schedule) == 0 {
 		return errors.New("tambahkan target luaran, RAB, dan jadwal kegiatan")
 	}
+	hasArticle := false
 	for _, output := range data.Outputs {
 		if !filled(output.Kind, output.Status) || output.Year < starts.Year() || output.Year > 2200 {
 			return errors.New("periksa jenis, status, dan tahun target setiap luaran")
 		}
+		lowerKind := strings.ToLower(output.Kind)
+		if strings.Contains(lowerKind, "artikel") || strings.Contains(lowerKind, "jurnal") || strings.Contains(lowerKind, "publikasi") {
+			hasArticle = true
+		}
+	}
+	if !hasArticle {
+		return errors.New("penelitian berbasis output wajib menyertakan minimal 1 luaran publikasi artikel ilmiah")
 	}
 	for _, cost := range data.Costs {
 		if !filled(cost.Category, cost.Item, cost.Reason, cost.Quantity, cost.Unit, cost.Price) {
@@ -195,6 +207,64 @@ func filled(items ...string) bool {
 		}
 	}
 	return true
+}
+
+func filledHTML(items ...string) bool {
+	for _, item := range items {
+		if strings.TrimSpace(stripHTMLTags(item)) == "" {
+			return false
+		}
+	}
+	return true
+}
+
+var (
+	dangerousBlockPattern = regexp.MustCompile(`(?is)<\s*(script|style|iframe|object|embed|svg|math)\b[^>]*>.*?<\s*/\s*(script|style|iframe|object|embed|svg|math)\s*>`)
+	anyTagPattern         = regexp.MustCompile(`<[^>]+>`)
+	allowedTagPattern     = regexp.MustCompile(`(?is)</?(p|br|b|strong|i|em|u|ul|ol|li|sub|sup|h3|h4|div|span)(\s[^>]*)?>`)
+	eventAttrPattern      = regexp.MustCompile(`(?is)\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)`)
+	jsProtoPattern        = regexp.MustCompile(`(?is)javascript\s*:`)
+)
+
+func stripHTMLTags(s string) string {
+	s = strings.ReplaceAll(s, "<br>", "\n")
+	s = strings.ReplaceAll(s, "<br/>", "\n")
+	s = strings.ReplaceAll(s, "<br />", "\n")
+	s = strings.ReplaceAll(s, "</p>", "\n")
+	s = strings.ReplaceAll(s, "</li>", "\n")
+	s = anyTagPattern.ReplaceAllString(s, " ")
+	s = html.UnescapeString(s)
+	s = strings.ReplaceAll(s, "\u00a0", " ")
+	return strings.TrimSpace(s)
+}
+
+func sanitizeProposalHTML(s string) string {
+	s = dangerousBlockPattern.ReplaceAllString(s, "")
+	s = eventAttrPattern.ReplaceAllString(s, "")
+	s = jsProtoPattern.ReplaceAllString(s, "")
+	// Keep only allowed formatting tags; escape/strip disallowed tags
+	var b strings.Builder
+	last := 0
+	for _, loc := range anyTagPattern.FindAllStringIndex(s, -1) {
+		b.WriteString(s[last:loc[0]])
+		tag := s[loc[0]:loc[1]]
+		if allowedTagPattern.MatchString(tag) {
+			b.WriteString(tag)
+		}
+		last = loc[1]
+	}
+	b.WriteString(s[last:])
+	return strings.TrimSpace(b.String())
+}
+
+func (data *proposalData) sanitizeNarratives() {
+	data.Roadmap = sanitizeProposalHTML(data.Roadmap)
+	data.Summary = sanitizeProposalHTML(data.Summary)
+	data.Introduction = sanitizeProposalHTML(data.Introduction)
+	data.Literature = sanitizeProposalHTML(data.Literature)
+	data.Method = sanitizeProposalHTML(data.Method)
+	data.Expected = sanitizeProposalHTML(data.Expected)
+	data.References = sanitizeProposalHTML(data.References)
 }
 
 func validateTeamRefs(ctx context.Context, tx *sql.Tx, tenant int64, data proposalData) error {

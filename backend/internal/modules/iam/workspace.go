@@ -12,7 +12,7 @@ import (
 	"simp2m/backend/internal/modules/auth"
 )
 
-var registry = []string{read, manage, auditRead, masterRead, masterManage, grantRead, grantManage, researchApply, researchVerify, communityDraft, documentsRead, reportsDraft}
+var registry = []string{read, manage, auditRead, masterRead, masterManage, grantRead, grantManage, researchApply, researchVerify, researchReview, researchDecide, communityDraft, documentsRead, reportsDraft}
 
 type userRecord struct {
 	ID          int64     `json:"id"`

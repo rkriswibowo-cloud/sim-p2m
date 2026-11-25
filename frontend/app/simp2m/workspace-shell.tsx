@@ -22,6 +22,7 @@ interface ShellProps {
   canCommunity: boolean;
   canDocuments: boolean;
   canReports: boolean;
+  canSelection: boolean;
   date: string;
   footer: React.ReactNode;
   children: React.ReactNode;
@@ -34,7 +35,7 @@ const masterGroups: { label: string; icon: LucideIcon; kinds: [string, string, L
   { label: "Riset dan pendanaan", icon: FlaskConical, kinds: [["Sumber dana", "funding-sources", Wallet], ["Kelompok skema", "scheme-groups", Layers3], ["Skema", "schemes", ClipboardList], ["Bidang riset", "research-fields", FlaskConical], ["Kategori RAB", "budget-categories", Wallet]] },
 ];
 
-function Navigation({ system, canAccess, canAudit, canMaster, canGrant, canResearch, canCommunity, canDocuments, canReports, compact, close }: Omit<ShellProps, "name" | "institution" | "date" | "footer" | "children"> & { compact?: boolean; close?: () => void }) {
+function Navigation({ system, canAccess, canAudit, canMaster, canGrant, canResearch, canCommunity, canDocuments, canReports, canSelection, compact, close }: Omit<ShellProps, "name" | "institution" | "date" | "footer" | "children"> & { compact?: boolean; close?: () => void }) {
   const pathname = usePathname();
   const params = useSearchParams();
   const [query, setQuery] = useState("");
@@ -46,6 +47,10 @@ function Navigation({ system, canAccess, canAudit, canMaster, canGrant, canResea
   const administration: NavItem[] = [];
   if (canGrant) core.push({ label: "Hibah", href: "/simp2m/hibah", icon: Wallet });
   if (canResearch) core.push({ label: "Penelitian", href: "/simp2m/penelitian", icon: FlaskConical });
+  if (canSelection) core.push({ label: "Seleksi & Review", href: "/simp2m/seleksi", icon: ShieldCheck });
+  if (canResearch || canSelection) core.push({ label: "Kontrak & Pendanaan", href: "/simp2m/pendanaan", icon: BriefcaseBusiness });
+  if (canResearch || canSelection || canReports) core.push({ label: "Monitoring & Luaran", href: "/simp2m/monev", icon: CalendarDays });
+  if (canSelection || canAudit || canGrant || system) core.push({ label: "Analitik & Ekspor", href: "/simp2m/analitik", icon: ClipboardList });
   if (canCommunity) core.push({ label: "Pengabdian kepada Masyarakat", href: "/simp2m/pengabdian", icon: UsersRound });
   if (canDocuments) core.push({ label: "Dokumen", href: "/simp2m/dokumen", icon: FileText });
   if (canReports) core.push({ label: "Laporan", href: "/simp2m/laporan", icon: ClipboardList });

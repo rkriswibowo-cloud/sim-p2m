@@ -24,6 +24,7 @@ export default async function WorkspaceLayout({ children }: { children: React.Re
       canCommunity={user?.canCommunity ?? false}
       canDocuments={user?.canDocuments ?? false}
       canReports={user?.canReports ?? false}
+      canSelection={user?.canSelection ?? false}
       date={date}
       footer={<BrandCredit />}
     >

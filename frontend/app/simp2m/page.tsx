@@ -43,6 +43,7 @@ export default async function Dashboard() {
   const totals = activeInstitution ? await Promise.all(metrics.map(metric => countActive(metric.kind))) : [];
   const shortcuts = [
     ...(user.canMaster ? [{ title: "Siapkan master data", description: "Organisasi, SDM, skema, dan bidang riset.", href: "/simp2m/master-data", icon: FolderKanban }] : []),
+    ...(user.canSelection || canSeeAudit ? [{ title: "Analitik kinerja & ekspor", description: "KPI penelitian, capaian luaran, dan ekspor Excel/CSV.", href: "/simp2m/analitik", icon: ClipboardList }] : []),
     ...(canManageAccess ? [{ title: "Kelola pengguna dan role", description: "Akun, keanggotaan institusi, dan izin akses.", href: "/simp2m/akses", icon: UsersRound }] : []),
     ...(canSeeAudit ? [{ title: "Tinjau riwayat perubahan", description: "Audit tindakan untuk institusi yang dipilih.", href: "/simp2m/akses?section=audit", icon: ClipboardList }] : []),
   ];

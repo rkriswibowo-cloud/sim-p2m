@@ -2,27 +2,40 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { RichTextEditor } from "./rich-editor";
 
 export const steps = ["Skema dan identitas", "Tim", "Roadmap dan ringkasan", "Pendahuluan dan metode", "Luaran dan referensi", "RAB dan jadwal", "Tinjau usulan"] as const;
 export type Choice = { id: number; name: string };
+export type MemberConsent = { lecturerId: number; name: string; code: string; status: "pending" | "approved" | "rejected"; note: string };
 type TextKey = "object" | "location" | "starts" | "ends" | "partner" | "contribution" | "findings" | "journal" | "roadmap" | "summary" | "sdgKeywords" | "introduction" | "literature" | "method" | "expected" | "references";
 type ListKey = "team" | "students" | "outputs" | "costs" | "schedule";
 type Row = Record<string, string | number>;
 export type ProposalData = Partial<Record<TextKey, string> & Record<ListKey, Row[]> & { keywords: string[] }>;
-type Column = { key: string; name: string; type?: "number" | "lecturers" | "students" | "budgetCategory" };
+type Column = { key: string; name: string; type?: "number" | "lecturers" | "students" | "budgetCategory" | "outputKind" };
 type OptionLists = { fields: Choice[]; lecturers: Choice[]; students: Choice[]; budgetCategories: Choice[] };
+
+const outputKindOptions = [
+  "Publikasi Artikel Jurnal Nasional Terakreditasi",
+  "Publikasi Artikel Jurnal Nasional",
+  "Publikasi Artikel Jurnal Internasional Bereputasi",
+  "Publikasi Artikel Jurnal Internasional",
+  "Prosiding Seminar Nasional/Internasional",
+  "HKI / Hak Cipta / Paten",
+  "Buku Ajar / Monograf",
+  "Produk / Prototipe",
+];
 
 const rowDefinitions: Record<ListKey, { title: string; columns: Column[] }> = {
   team: { title: "Anggota dosen", columns: [{key:"id",name:"Dosen",type:"lecturers"},{key:"expertise",name:"Keahlian"},{key:"hours",name:"Jam per minggu",type:"number"},{key:"task",name:"Tugas"}] },
   students: { title: "Mahasiswa", columns: [{key:"id",name:"Mahasiswa",type:"students"},{key:"activity",name:"Bentuk keterlibatan"},{key:"thesis",name:"Judul tugas akhir (opsional)"}] },
-  outputs: { title: "Target luaran", columns: [{key:"kind",name:"Jenis luaran"},{key:"status",name:"Status target"},{key:"year",name:"Tahun target",type:"number"}] },
+  outputs: { title: "Target luaran", columns: [{key:"kind",name:"Jenis luaran",type:"outputKind"},{key:"status",name:"Status target"},{key:"year",name:"Tahun target",type:"number"}] },
   costs: { title: "Rincian anggaran", columns: [{key:"categoryId",name:"Kategori",type:"budgetCategory"},{key:"item",name:"Item"},{key:"reason",name:"Justifikasi"},{key:"quantity",name:"Kuantitas"},{key:"unit",name:"Satuan"},{key:"price",name:"Harga satuan (Rp)"}] },
   schedule: { title: "Jadwal kegiatan", columns: [{key:"name",name:"Tahapan"},{key:"output",name:"Luaran tahapan"},{key:"indicator",name:"Indikator"},{key:"person",name:"Penanggung jawab"},{key:"from",name:"Mulai bulan ke-",type:"number"},{key:"to",name:"Selesai bulan ke-",type:"number"}] },
 };
 const formatMoney = new Intl.NumberFormat("id-ID", {style:"currency",currency:"IDR", maximumFractionDigits:0});
 
-export function ProposalFields({ step, data, options, title, field, budget, disabled, onTitle, onField, onData }: {
-  step:number; data:ProposalData; options:OptionLists; title:string; field:number|null; budget:string;
+export function ProposalFields({ step, data, options, title, field, budget, consents, disabled, onTitle, onField, onData }: {
+  step:number; data:ProposalData; options:OptionLists; title:string; field:number|null; budget:string; consents?:MemberConsent[];
   disabled:boolean; onTitle:(value:string)=>void; onField:(value:number|null)=>void; onData:(value:ProposalData)=>void;
 }) {
   function text(key:TextKey, label:string, type="text") {
@@ -30,20 +43,15 @@ export function ProposalFields({ step, data, options, title, field, budget, disa
       onChange={event => onData({...data,[key]:event.target.value})} />;
   }
   function narrative(key:TextKey,label:string,limit?:number) {
-    const value=data[key] ?? "";
-    const count=value.trim().split(/\s+/).filter(Boolean).length;
-    return <div key={key} className="space-y-1">
-      <label htmlFor={key} className="block">{label}</label>
-      <textarea id={key} value={value} rows={5} maxLength={16000} disabled={disabled}
-        onChange={event => onData({...data,[key]:event.target.value})}
-        className="w-full rounded-md border border-input bg-background p-2 text-sm" />
-      {limit && <p className={count>limit ? "text-xs text-destructive" : "text-xs text-muted-foreground"}>{count} dari {limit} kata</p>}
-    </div>;
+    return <RichTextEditor key={key} id={key} label={label} value={data[key] ?? ""} disabled={disabled} limit={limit}
+      onChange={next => onData({...data,[key]:next})} />;
   }
   function records(key:ListKey) {
     const definition=rowDefinitions[key], items=data[key] ?? [];
     return <fieldset key={key} className="min-w-0 space-y-2 rounded-md border border-border p-2">
       <legend className="px-1 text-xs font-semibold">{definition.title}</legend>
+      {key==="team" && <p className="text-xs text-muted-foreground">Minimal 1 anggota dosen dan maksimal 3 anggota dosen.</p>}
+      {key==="outputs" && <p className="text-xs text-muted-foreground">Penelitian berbasis output: wajib menyertakan minimal 1 luaran publikasi artikel ilmiah.</p>}
       {!items.length && <p className="text-xs text-muted-foreground">Belum ada baris.</p>}
       {key==="costs" && !disabled && !options.budgetCategories.length &&
         <p className="text-xs text-muted-foreground">Belum ada kategori RAB aktif. Hubungi admin untuk menambahkan kategori.</p>}
@@ -69,6 +77,17 @@ export function ProposalFields({ step, data, options, title, field, budget, disa
               </select>
             </div>;
           }
+          if(column.type==="outputKind") {
+            const currentKind = String(item[column.key] || "");
+            return <div key={column.key} className="min-w-0">
+              <label htmlFor={id} className="mb-1 block">{column.name}</label>
+              <select id={id} className="w-full" disabled={disabled} value={currentKind} onChange={event=>update(event.target.value)}>
+                <option value="">Pilih jenis luaran</option>
+                {outputKindOptions.map(opt=><option key={opt} value={opt}>{opt}</option>)}
+                {!!currentKind && !outputKindOptions.includes(currentKind) && <option value={currentKind}>{currentKind}</option>}
+              </select>
+            </div>;
+          }
           if(column.type==="lecturers"||column.type==="students") return <div key={column.key} className="min-w-0">
             <label htmlFor={id} className="mb-1 block">{column.name}</label>
             <select id={id} className="w-full" disabled={disabled} value={item[column.key] || ""} onChange={event=>update(Number(event.target.value))}>
@@ -82,8 +101,15 @@ export function ProposalFields({ step, data, options, title, field, budget, disa
         })}
         {!disabled && <Button type="button" variant="ghost" size="sm" className="justify-self-start text-destructive"
           aria-label={`Hapus baris ${definition.title} ${index+1}`} onClick={()=>onData({...data,[key]:items.filter((_,i)=>i!==index)})}>Hapus baris</Button>}
+        {key==="team" && item.id && (() => {
+          const c = consents?.find(row => row.lecturerId === Number(item.id));
+          if (!c) return <span className="text-xs text-muted-foreground">Persetujuan: menunggu simpan draf</span>;
+          const label = c.status === "approved" ? "Disetujui anggota" : c.status === "rejected" ? `Ditolak${c.note ? `: ${c.note}` : ""}` : "Menunggu persetujuan anggota";
+          const cls = c.status === "approved" ? "text-emerald-600 dark:text-emerald-400" : c.status === "rejected" ? "text-destructive" : "text-amber-600 dark:text-amber-400";
+          return <span className={`text-xs font-medium ${cls}`}>{label}</span>;
+        })()}
       </div>)}
-      {!disabled && <Button type="button" variant="outline" size="sm" onClick={()=>onData({...data,[key]:[...items,{}]})}>Tambah {definition.title.toLowerCase()}</Button>}
+      {!disabled && !(key==="team" && items.length>=3) && <Button type="button" variant="outline" size="sm" onClick={()=>onData({...data,[key]:[...items,{}]})}>Tambah {definition.title.toLowerCase()}</Button>}
     </fieldset>;
   }
 

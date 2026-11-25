@@ -15,6 +15,7 @@ export interface Identity {
   canCommunity: boolean;
   canDocuments: boolean;
   canReports: boolean;
+  canSelection: boolean;
 }
 
 export interface InstitutionAccess {
@@ -28,6 +29,9 @@ export interface InstitutionAccess {
   canRead: boolean;
   canAudit: boolean;
   canMasterRead: boolean;
+  canVerify?: boolean;
+  canReview?: boolean;
+  canDecide?: boolean;
 }
 
 export const getWorkspaceSession = cache(async () => {

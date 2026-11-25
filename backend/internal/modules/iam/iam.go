@@ -49,9 +49,13 @@ func (s service) routes(r *gin.RouterGroup) {
 	r.DELETE("/institutions/:institution/reports/:target/:kind", s.mutation(reportsDraft, s.changeReport))
 	r.GET("/institutions/:institution/research", s.scoped(researchApply, s.listProposals))
 	r.GET("/institutions/:institution/research/options", s.scoped(researchApply, s.researchOptions))
+	r.GET("/institutions/:institution/research/invitations", s.scoped(researchApply, s.listInvitations))
 	r.GET("/institutions/:institution/research/verification", s.scoped(researchVerify, s.verificationQueue))
 	r.POST("/institutions/:institution/research/verification/:target", s.mutation(researchVerify, s.verifyProposal))
 	r.POST("/institutions/:institution/research/:target/verification", s.mutation(researchApply, s.requestVerification))
+	r.POST("/institutions/:institution/research/:target/consent", s.mutation(researchApply, s.respondConsent))
+	r.GET("/institutions/:institution/research/:target/export/proposal-docx", s.scoped(researchApply, s.exportProposalDocx))
+	r.GET("/institutions/:institution/research/:target/export/student-letter-docx", s.scoped(researchApply, s.exportStudentLetterDocx))
 	r.POST("/institutions/:institution/research/:target/grant", s.mutation(researchApply, s.refreshProposalGrant))
 	r.GET("/institutions/:institution/research/:target", s.scoped(researchApply, s.getProposal))
 	r.GET("/institutions/:institution/research/:target/journal", s.scoped(researchApply, s.listJournal))
@@ -63,7 +67,40 @@ func (s service) routes(r *gin.RouterGroup) {
 	r.POST("/institutions/:institution/research", s.mutation(researchApply, s.createProposal))
 	r.PUT("/institutions/:institution/research/:target", s.mutationWithLimit(researchApply, s.saveProposal, 256<<10))
 	r.POST("/institutions/:institution/research/:target/submit", s.mutation(researchApply, s.submitProposal))
+	r.POST("/institutions/:institution/research/:target/resubmit", s.mutation(researchApply, s.resubmitProposal))
 	r.DELETE("/institutions/:institution/research/:target", s.mutation(researchApply, s.archiveProposal))
+	r.GET("/institutions/:institution/workflow/proposals", s.scoped(read, s.listWorkflowProposals))
+	r.POST("/institutions/:institution/workflow/proposals/:target/transition", s.mutation(researchVerify, s.transitionProposal))
+	r.POST("/institutions/:institution/workflow/proposals/:target/reviewers", s.mutation(researchVerify, s.assignReviewer))
+	r.DELETE("/institutions/:institution/workflow/assignments/:target", s.mutation(researchVerify, s.removeReviewerAssignment))
+	r.POST("/institutions/:institution/workflow/proposals/:target/decision", s.mutation(researchDecide, s.decideFunding))
+	r.GET("/institutions/:institution/reviews", s.scoped(researchReview, s.listMyReviews))
+	r.POST("/institutions/:institution/reviews/:target/conflict", s.mutation(researchReview, s.respondReviewAssignment))
+	r.POST("/institutions/:institution/reviews/:target/submit", s.mutationWithLimit(researchReview, s.submitReview, 128<<10))
+	r.GET("/institutions/:institution/projects", s.scoped(read, s.listProjects))
+	r.POST("/institutions/:institution/projects/convert/:target", s.mutation(researchDecide, s.convertProposalToProject))
+	r.POST("/institutions/:institution/projects/:target/amendments", s.mutation(researchDecide, s.amendProjectContract))
+	r.GET("/institutions/:institution/projects/:target/contract-docx", s.scoped(read, s.exportContractDocx))
+	r.POST("/institutions/:institution/projects/:target/disbursements", s.mutation(researchDecide, s.saveDisbursement))
+	r.POST("/institutions/:institution/disbursements/:target/transfer", s.mutationWithLimit(researchDecide, s.markDisbursementTransferred, (5<<20)+(64<<10)))
+	r.GET("/institutions/:institution/disbursements/:target/proof", s.scoped(read, s.downloadDisbursementProof))
+	r.GET("/institutions/:institution/external-fundings", s.scoped(researchApply, s.listExternalFundings))
+	r.POST("/institutions/:institution/external-fundings", s.mutation(researchApply, s.saveExternalFunding))
+	r.PUT("/institutions/:institution/external-fundings/:target/proof", s.mutationWithLimit(researchApply, s.uploadExternalProof, (5<<20)+(64<<10)))
+	r.GET("/institutions/:institution/external-fundings/:target/proof", s.scoped(researchApply, s.downloadExternalProof))
+	r.POST("/institutions/:institution/external-fundings/:target/verify", s.mutation(researchVerify, s.verifyExternalFunding))
+	r.GET("/institutions/:institution/monev/proposals", s.scoped(read, s.listMonevProposals))
+	r.POST("/institutions/:institution/monev/proposals/:target", s.mutation(read, s.createMonevReview))
+	r.POST("/institutions/:institution/monev/reviews/:target/follow-up", s.mutation(researchApply, s.respondMonevFollowUp))
+	r.POST("/institutions/:institution/monev/proposals/:target/expenses", s.mutation(researchApply, s.addProjectExpense))
+	r.DELETE("/institutions/:institution/monev/expenses/:target", s.mutation(researchApply, s.deleteProjectExpense))
+	r.POST("/institutions/:institution/monev/proposals/:target/outputs", s.mutation(researchApply, s.saveResearchOutput))
+	r.PUT("/institutions/:institution/monev/outputs/:target/proof", s.mutationWithLimit(researchApply, s.uploadOutputProof, (5<<20)+(64<<10)))
+	r.GET("/institutions/:institution/monev/outputs/:target/proof", s.scoped(read, s.downloadOutputProof))
+	r.POST("/institutions/:institution/monev/outputs/:target/verify", s.mutation(researchVerify, s.verifyResearchOutput))
+	r.POST("/institutions/:institution/monev/proposals/:target/close", s.mutation(read, s.closeProject))
+	r.GET("/institutions/:institution/analytics", s.scoped(read, s.analyticsOverview))
+	r.GET("/institutions/:institution/analytics/export", s.scoped(read, s.analyticsExport))
 	r.GET("/institutions/:institution/community", s.scoped(communityDraft, s.listCommunity))
 	r.POST("/institutions/:institution/community", s.mutationWithLimit(communityDraft, s.saveCommunity, 128<<10))
 	r.PUT("/institutions/:institution/community/:target", s.mutationWithLimit(communityDraft, s.saveCommunity, 128<<10))
@@ -201,7 +238,7 @@ func (s service) institutions(c *gin.Context) {
 	if !ok {
 		return
 	}
-	query := "SELECT id,code,name,is_active, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM institutions ORDER BY name LIMIT 200"
+	query := "SELECT id,code,name,is_active, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE FROM institutions ORDER BY name LIMIT 200"
 	var params []any
 	if a.mode == "production" && !a.system() {
 		query = `SELECT i.id,i.code,i.name,i.is_active,
@@ -213,7 +250,10 @@ func (s service) institutions(c *gin.Context) {
    COALESCE(MAX(p.permission_code='research.apply'),FALSE),
    COALESCE(MAX(p.permission_code='community.draft'),FALSE),
    COALESCE(MAX(p.permission_code='documents.read'),FALSE),
-   COALESCE(MAX(p.permission_code='reports.draft'),FALSE)
+   COALESCE(MAX(p.permission_code='reports.draft'),FALSE),
+   COALESCE(MAX(p.permission_code='research.verify'),FALSE),
+   COALESCE(MAX(p.permission_code='research.review'),FALSE),
+   COALESCE(MAX(p.permission_code='research.decide'),FALSE)
    FROM institutions i JOIN memberships m ON m.institution_id=i.id
    LEFT JOIN effective_membership_permissions p ON p.institution_id=i.id AND p.user_id=m.user_id
    WHERE m.user_id=? AND m.is_active AND i.is_active
@@ -240,11 +280,14 @@ func (s service) institutions(c *gin.Context) {
 		CanCommunity    bool   `json:"canCommunity"`
 		CanDocuments    bool   `json:"canDocuments"`
 		CanReports      bool   `json:"canReports"`
+		CanVerify       bool   `json:"canVerify"`
+		CanReview       bool   `json:"canReview"`
+		CanDecide       bool   `json:"canDecide"`
 	}
 	records := []institution{}
 	for rows.Next() {
 		var item institution
-		if rows.Scan(&item.ID, &item.Code, &item.Name, &item.Active, &item.CanRead, &item.CanAudit, &item.CanMasterRead, &item.CanMasterManage, &item.CanGrantRead, &item.CanResearch, &item.CanCommunity, &item.CanDocuments, &item.CanReports) != nil {
+		if rows.Scan(&item.ID, &item.Code, &item.Name, &item.Active, &item.CanRead, &item.CanAudit, &item.CanMasterRead, &item.CanMasterManage, &item.CanGrantRead, &item.CanResearch, &item.CanCommunity, &item.CanDocuments, &item.CanReports, &item.CanVerify, &item.CanReview, &item.CanDecide) != nil {
 			c.Status(503)
 			return
 		}

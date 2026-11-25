@@ -6,18 +6,27 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { confirmRemoval, workspaceToastOptions } from "../confirm-removal";
 import { ProposalFields, steps } from "./proposal-fields";
-import type { Choice, ProposalData } from "./proposal-fields";
+import type { Choice, MemberConsent, ProposalData } from "./proposal-fields";
+import { PrintPreviewModal } from "./print-views";
 
 type Mode = "production" | "trial-admin" | "trial-reader";
 type Institution = Choice & { active:boolean; canResearch:boolean };
 type Grant = { id:number; periodId:number; schemeId:number; scheme:string; source:string; version:number; budget:string; duration:number; activeLecturer:boolean; manual:string };
 type Options = { periods:Choice[]; versions:Grant[]; fields:Choice[]; lecturers:Choice[]; students:Choice[]; budgetCategories:Choice[]; canVerify:boolean };
+type ApprovalEntry = { id:number; fromStatus:string; toStatus:string; actorName:string; roleName:string; note:string; revision:number; createdAt:string };
+type PublicReview = { id:number; totalScore:number; recommendation:string; publicComment:string; submittedAt:string };
 type Proposal = {
   id:number; grantVersionId:number; fieldId:number|null; title:string; status:"draft"|"submitted";
   revision:number; budget:string; scheme:string; period:string; owner:string; updatedAt:string; data:ProposalData;
-  roadmapImage:boolean; methodImage:boolean;
+  roadmapImage:boolean; methodImage:boolean; studentLetterFile?:boolean;
   periodId:number; schemeId:number; grantVersion:number; requiresVerification:boolean;
   verification:"none"|"requested"|"verified";
+  workflowStatus?:string; fundingDecision?:string; approvedBudget?:string; decisionNote?:string;
+  consents?:MemberConsent[]; approvals?:ApprovalEntry[]; publicReviews?:PublicReview[];
+};
+type InvitationItem={
+  proposalId:number; title:string; scheme:string; period:string; owner:string; proposalStatus:string;
+  expertise:string; hours:number; task:string; status:"pending"|"approved"|"rejected"; note:string;
 };
 type VerificationRequest={id:number;revision:number;title:string;owner:string;email:string;scheme:string;requirement:string;activeLecturer:boolean;own:boolean};
 type DraftInput = { title:string; fieldId:number|null; data:ProposalData };
@@ -59,13 +68,16 @@ export function ResearchPanel(){
   const [confirmed,setConfirmed]=useState(false);
   const [error,setError]=useState("");
   const [requests,setRequests]=useState<VerificationRequest[]>([]);
+  const [invitations,setInvitations]=useState<InvitationItem[]>([]);
+  const [printMode,setPrintMode]=useState<"proposal"|"student-letter"|null>(null);
   const busy=useRef(false);
   const dirty=changed!==saved;
   const base=mode==="production"?"/api/v1/iam":`/api/v1/trial/${mode}/iam`;
   const endpoint=`${base}/institutions/${tenant}/research`;
   const selectedGrant=options.versions.find(item=>item.id===grant);
   const currentGrant=options.versions.find(item=>item.periodId===proposal?.periodId&&item.schemeId===proposal?.schemeId);
-  const writable=mode!=="trial-reader"&&proposal?.status==="draft";
+  const isRevision=proposal?.status==="submitted"&&(proposal.workflowStatus==="admin_revision"||proposal.workflowStatus==="review_revision");
+  const writable=mode!=="trial-reader"&&(proposal?.status==="draft"||isRevision);
   const scopeLocked=pending||dirty;
 
   useEffect(()=>{
@@ -83,11 +95,16 @@ export function ResearchPanel(){
   useEffect(()=>{
     if(!tenant)return;
     const controller=new AbortController();
-    void Promise.all([api<Proposal[]>(endpoint,{signal:controller.signal}),api<Options>(endpoint+"/options",{signal:controller.signal})])
-      .then(async ([list,choices])=>{
+    void Promise.all([
+      api<Proposal[]>(endpoint,{signal:controller.signal}),
+      api<Options>(endpoint+"/options",{signal:controller.signal}),
+      api<InvitationItem[]>(endpoint+"/invitations",{signal:controller.signal}).catch(()=>[] as InvitationItem[])
+    ])
+      .then(async ([list,choices,invites])=>{
         if(controller.signal.aborted)return;
         setItems(list);
         setOptions(choices);
+        setInvitations(invites);
         setGrant(previous=>choices.versions.some(item=>item.id===previous)?previous:0);
         if(choices.canVerify){
           const queue=await api<VerificationRequest[]>(endpoint+"/verification",{signal:controller.signal});
@@ -133,7 +150,7 @@ export function ResearchPanel(){
       const requestBody={...draft,revision:proposal.revision};
       await api(`${endpoint}/${proposal.id}`,json("PUT",requestBody));
       const refreshed=await api<Proposal>(`${endpoint}/${proposal.id}`);
-      if(refreshed.revision!==proposal.revision+1 || refreshed.status!=="draft"){
+      if(refreshed.revision!==proposal.revision+1 || (!isRevision && refreshed.status!=="draft")){
         throw new Error("Versi draf berubah di sesi lain. Muat ulang draf sebelum melanjutkan.");
       }
       setProposal(refreshed);
@@ -146,7 +163,7 @@ export function ResearchPanel(){
       setError(message);setAutoFailed(true);
       if(manual)toast.error(message,workspaceToastOptions);
     }finally{busy.current=false;setPending(false);}
-  },[changed,dirty,draft,endpoint,proposal,writable]);
+  },[changed,dirty,draft,endpoint,isRevision,proposal,writable]);
 
   useEffect(()=>{
     if(!dirty||!writable||pending||autoFailed)return;
@@ -172,7 +189,7 @@ export function ResearchPanel(){
     });
   }
 
-  function upload(kind:"roadmap"|"method",file:File|undefined){
+  function upload(kind:"roadmap"|"method"|"student_letter",file:File|undefined){
     if(!file||!proposal||dirty)return;
     void run(async()=>{
       const body=new FormData();
@@ -180,7 +197,7 @@ export function ResearchPanel(){
       await api(`${endpoint}/${proposal.id}/images/${kind}`,{method:"PUT",body});
       const refreshed=await api<Proposal>(`${endpoint}/${proposal.id}`);
       setProposal(refreshed);
-      toast.success("Gambar tersimpan.",workspaceToastOptions);
+      toast.success(kind==="student_letter"?"Surat keterlibatan mahasiswa tersimpan.":"Gambar tersimpan.",workspaceToastOptions);
     });
   }
 
@@ -248,7 +265,32 @@ export function ResearchPanel(){
               aria-current={step===index?"step":undefined} onClick={()=>setStep(index)}>{label}</Button>)}
           </nav>
           <ProposalFields step={step} data={draft.data} options={options} title={draft.title} field={draft.fieldId} budget={proposal.budget}
-            disabled={!writable} onTitle={title=>edit({title})} onField={fieldId=>edit({fieldId})} onData={data=>edit({data})} />
+            consents={proposal.consents} disabled={!writable} onTitle={title=>edit({title})} onField={fieldId=>edit({fieldId})} onData={data=>edit({data})} />
+          {step===1&&(draft.data.students?.length ?? 0)>0&&<div className="space-y-2 rounded-md border border-border p-3 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="font-semibold">Surat Keterlibatan Mahasiswa (Wajib)</p>
+                <p className="text-xs text-muted-foreground">Penelitian yang melibatkan mahasiswa wajib menyertakan surat pernyataan bertanda tangan (PDF/JPG/PNG, maks. 5 MB).</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <a href={`${endpoint}/${proposal.id}/export/student-letter-docx`} className="inline-flex items-center rounded-md border border-input bg-background px-2.5 py-1 text-xs font-medium hover:bg-accent">
+                  Unduh Template (.docx)
+                </a>
+                <Button size="sm" type="button" variant="outline" onClick={()=>setPrintMode("student-letter")}>
+                  Pratinjau / Cetak Surat
+                </Button>
+              </div>
+            </div>
+            {proposal.studentLetterFile && (
+              <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                Berkas terunggah · <a target="_blank" rel="noopener" className="underline" href={`${endpoint}/${proposal.id}/images/student_letter`}>Lihat Surat Keterlibatan Mahasiswa</a>
+              </p>
+            )}
+            {writable&&<label className="block text-xs">Unggah Surat Keterlibatan Mahasiswa
+              <input className="mt-1 block max-w-full" type="file" accept="application/pdf,image/png,image/jpeg" disabled={scopeLocked} onChange={event=>{upload("student_letter",event.target.files?.[0]);event.target.value="";}} />
+            </label>}
+            {dirty&&<p className="text-xs text-muted-foreground">Tunggu draf tersimpan sebelum mengunggah surat.</p>}
+          </div>}
           {(step===2||step===3)&&(()=>{
             const kind=step===2?"roadmap":"method";
             const hasImage=step===2?proposal.roadmapImage:proposal.methodImage;
@@ -274,12 +316,55 @@ export function ResearchPanel(){
                 {steps.slice(0,-1).map((label,index)=><section key={label} className="space-y-2 border-t border-border pt-2">
                   <h3 className="font-semibold">{label}</h3>
                   <ProposalFields step={index} data={draft.data} options={options} title={draft.title} field={draft.fieldId} budget={proposal.budget}
-                    disabled onTitle={()=>{}} onField={()=>{}} onData={()=>{}} />
+                    consents={proposal.consents} disabled onTitle={()=>{}} onField={()=>{}} onData={()=>{}} />
                 </section>)}
               </div>
             </details>
+            {!!proposal.consents?.length&&<div className="rounded border border-border p-2 space-y-1">
+              <p className="font-medium text-xs">Persetujuan anggota tim dosen:</p>
+              <ul className="space-y-1 text-xs">
+                {proposal.consents.map(c=><li key={c.lecturerId} className="flex flex-wrap items-center justify-between gap-2">
+                  <span>{c.name} ({c.code})</span>
+                  <span className={c.status==="approved"?"text-emerald-600 dark:text-emerald-400 font-medium":c.status==="rejected"?"text-destructive font-medium":"text-amber-600 dark:text-amber-400 font-medium"}>
+                    {c.status==="approved"?"Disetujui":c.status==="rejected"?`Ditolak${c.note?` (${c.note})`:""}`:"Menunggu persetujuan"}
+                  </span>
+                </li>)}
+              </ul>
+            </div>}
+            <div className="flex flex-wrap gap-2 border-t border-border pt-2">
+              <a href={`${endpoint}/${proposal.id}/export/proposal-docx`} className="inline-flex items-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent">
+                Unduh Proposal (.docx)
+              </a>
+              <Button size="sm" type="button" variant="outline" onClick={()=>setPrintMode("proposal")}>
+                Pratinjau / PDF Proposal
+              </Button>
+              <a href={`${endpoint}/${proposal.id}/export/student-letter-docx`} className="inline-flex items-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent">
+                Unduh Surat Mahasiswa (.docx)
+              </a>
+              <Button size="sm" type="button" variant="outline" onClick={()=>setPrintMode("student-letter")}>
+                Pratinjau / PDF Surat Mahasiswa
+              </Button>
+            </div>
+            {proposal.status==="submitted"&&<div className="rounded border border-border p-2 space-y-1 text-xs">
+              <p><strong>Status Seleksi:</strong> {proposal.workflowStatus ?? "submitted"} · <strong>Keputusan Pendanaan:</strong> {proposal.fundingDecision==="funded"?"Didanai":proposal.fundingDecision==="not_funded"?"Tidak Didanai":"Menunggu Keputusan"}</p>
+              {proposal.approvedBudget&&<p><strong>Anggaran Disetujui:</strong> {money.format(BigInt(proposal.approvedBudget))}</p>}
+              {proposal.decisionNote&&<p><strong>Catatan Keputusan:</strong> {proposal.decisionNote}</p>}
+              {!!proposal.publicReviews?.length&&<div className="mt-1 border-t border-border pt-1 space-y-1">
+                <p className="font-semibold">Umpan Balik Reviewer:</p>
+                {proposal.publicReviews.map((r,idx)=><div key={r.id} className="rounded bg-muted/40 p-1.5">
+                  <span className="font-medium">Reviewer {idx+1} · Skor {r.totalScore.toFixed(2)} ({r.recommendation})</span>
+                  <p>{r.publicComment}</p>
+                </div>)}
+              </div>}
+              {!!proposal.approvals?.length&&<details className="pt-1">
+                <summary className="cursor-pointer font-medium">Riwayat status ({proposal.approvals.length})</summary>
+                <ul className="mt-1 space-y-0.5">
+                  {proposal.approvals.map(a=><li key={a.id}>{a.fromStatus} → {a.toStatus} ({a.actorName}){a.note?` — ${a.note}`:""}</li>)}
+                </ul>
+              </details>}
+            </div>}
             {writable&&<>
-              {proposal.requiresVerification&&<div className="rounded border border-border p-2">
+              {proposal.requiresVerification&&proposal.status==="draft"&&<div className="rounded border border-border p-2">
                 <p>{proposal.verification==="verified"?"Syarat manual telah diverifikasi.":proposal.verification==="requested"?"Menunggu verifikasi syarat dari LPPM.":"Jika syarat tidak dapat diperiksa otomatis, ajukan verifikasi LPPM."}</p>
                 {proposal.verification==="none"&&<Button size="sm" variant="outline" className="mt-2" disabled={scopeLocked} onClick={()=>void run(async()=>{
                   await api(`${endpoint}/${proposal.id}/verification`,json("POST",{revision:proposal.revision}));
@@ -289,12 +374,21 @@ export function ResearchPanel(){
                 })}>Ajukan verifikasi syarat</Button>}
               </div>}
               <label className="flex items-start gap-2"><input type="checkbox" checked={confirmed} disabled={pending} onChange={event=>setConfirmed(event.target.checked)} /> Saya sudah memeriksa isi usulan dan menyatakan data yang diajukan benar.</label>
-              <Button size="sm" disabled={scopeLocked||!confirmed} onClick={()=>void run(async()=>{
-                await api(`${endpoint}/${proposal.id}/submit`,json("POST",{revision:proposal.revision,confirmed:true}));
-                const refreshed=await api<Proposal>(`${endpoint}/${proposal.id}`);
-                setProposal(refreshed);setRevision(previous=>previous+1);
-                toast.success("Usulan berhasil dikirim.",workspaceToastOptions);
-              })}>Kirim usulan</Button>
+              {isRevision ? (
+                <Button size="sm" disabled={scopeLocked||!confirmed} onClick={()=>void run(async()=>{
+                  await api(`${endpoint}/${proposal.id}/resubmit`,json("POST",{revision:proposal.revision,confirmed:true}));
+                  const refreshed=await api<Proposal>(`${endpoint}/${proposal.id}`);
+                  setProposal(refreshed);setRevision(previous=>previous+1);
+                  toast.success("Revisi usulan berhasil dikirim ulang.",workspaceToastOptions);
+                })}>Kirim ulang revisi</Button>
+              ) : (
+                <Button size="sm" disabled={scopeLocked||!confirmed} onClick={()=>void run(async()=>{
+                  await api(`${endpoint}/${proposal.id}/submit`,json("POST",{revision:proposal.revision,confirmed:true}));
+                  const refreshed=await api<Proposal>(`${endpoint}/${proposal.id}`);
+                  setProposal(refreshed);setRevision(previous=>previous+1);
+                  toast.success("Usulan berhasil dikirim.",workspaceToastOptions);
+                })}>Kirim usulan</Button>
+              )}
             </>}
           </div>}
           {writable&&<div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-2">
@@ -335,6 +429,37 @@ export function ResearchPanel(){
         </CardContent>
       </Card>}
 
+      {!!invitations.length&&<Card className="workspace-panel rounded-md">
+        <CardHeader><CardTitle>Undangan anggota tim penelitian</CardTitle></CardHeader>
+        <CardContent className="space-y-2">
+          {invitations.map(inv=><article key={inv.proposalId} className="space-y-2 border-b border-border pb-2 text-sm">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
+                <h3 className="font-semibold">{inv.title||"Draf tanpa judul"}</h3>
+                <p className="text-xs text-muted-foreground">{inv.scheme} · {inv.period} · Ketua {inv.owner}</p>
+                <p className="text-xs text-muted-foreground">Keahlian: {inv.expertise||"-"} · {inv.hours||0} jam/minggu · Tugas: {inv.task||"-"}</p>
+              </div>
+              <span className={`text-xs font-medium ${inv.status==="approved"?"text-emerald-600 dark:text-emerald-400":inv.status==="rejected"?"text-destructive":"text-amber-600 dark:text-amber-400"}`}>
+                {inv.status==="approved"?"Disetujui":inv.status==="rejected"?"Ditolak":"Menunggu persetujuan"}
+              </span>
+            </div>
+            {mode!=="trial-reader"&&inv.proposalStatus==="draft"&&<div className="flex flex-wrap gap-2">
+              {inv.status!=="approved"&&<Button size="sm" variant="outline" disabled={pending} onClick={()=>void run(async()=>{
+                await api(`${endpoint}/${inv.proposalId}/consent`,json("POST",{status:"approved",note:""}));
+                setRevision(previous=>previous+1);
+                toast.success("Keanggotaan tim disetujui.",workspaceToastOptions);
+              })}>Setuju menjadi anggota</Button>}
+              {inv.status!=="rejected"&&<Button size="sm" variant="ghost" className="text-destructive" disabled={pending} onClick={()=>void run(async()=>{
+                const note=window.prompt("Alasan penolakan (opsional):") ?? "";
+                await api(`${endpoint}/${inv.proposalId}/consent`,json("POST",{status:"rejected",note}));
+                setRevision(previous=>previous+1);
+                toast.success("Undangan keanggotaan ditolak.",workspaceToastOptions);
+              })}>Tolak</Button>}
+            </div>}
+          </article>)}
+        </CardContent>
+      </Card>}
+
       <Card className="workspace-panel rounded-md">
         <CardHeader><CardTitle>Usulan saya</CardTitle></CardHeader>
         <CardContent className="space-y-2">
@@ -347,6 +472,13 @@ export function ResearchPanel(){
           </div>)}
         </CardContent>
       </Card>
+      {printMode&&proposal&&<PrintPreviewModal
+        mode={printMode}
+        proposal={{...proposal,title:draft.title,fieldId:draft.fieldId,data:draft.data}}
+        institutionName={institutions.find(i=>i.id===tenant)?.name ?? "Universitas Anwar Medika"}
+        options={options}
+        onClose={()=>setPrintMode(null)}
+      />}
     </section>
   );
 }

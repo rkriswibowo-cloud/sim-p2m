@@ -31,6 +31,7 @@ type Identity struct {
 	CanCommunity  bool   `json:"canCommunity"`
 	CanDocuments  bool   `json:"canDocuments"`
 	CanReports    bool   `json:"canReports"`
+	CanSelection  bool   `json:"canSelection"`
 }
 
 type Store struct{ DB *sql.DB }
@@ -137,6 +138,7 @@ func (s Store) Me(ctx context.Context, access string) (Identity, error) {
 		user.CanCommunity = user.CanAccess
 		user.CanDocuments = user.CanAccess
 		user.CanReports = user.CanAccess
+		user.CanSelection = user.CanAccess
 		if !user.CanAccess {
 			err = s.DB.QueryRowContext(ctx, `SELECT
 			 COALESCE(MAX(p.permission_code IN ('iam.read','iam.manage','audit.read')),FALSE),
@@ -145,9 +147,10 @@ func (s Store) Me(ctx context.Context, access string) (Identity, error) {
 			 COALESCE(MAX(p.permission_code='research.apply'),FALSE),
 			 COALESCE(MAX(p.permission_code='community.draft'),FALSE),
 			 COALESCE(MAX(p.permission_code='documents.read'),FALSE),
-			 COALESCE(MAX(p.permission_code='reports.draft'),FALSE)
+			 COALESCE(MAX(p.permission_code='reports.draft'),FALSE),
+			 COALESCE(MAX(p.permission_code IN ('research.verify','research.review','research.decide')),FALSE)
 			 FROM effective_membership_permissions p
-			 WHERE p.user_id=?`, user.ID).Scan(&user.CanAccess, &user.CanMaster, &user.CanGrant, &user.CanResearch, &user.CanCommunity, &user.CanDocuments, &user.CanReports)
+			 WHERE p.user_id=?`, user.ID).Scan(&user.CanAccess, &user.CanMaster, &user.CanGrant, &user.CanResearch, &user.CanCommunity, &user.CanDocuments, &user.CanReports, &user.CanSelection)
 		}
 	}
 	return user, err

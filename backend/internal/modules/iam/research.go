@@ -39,16 +39,25 @@ type proposal struct {
 	Owner                string       `json:"owner"`
 	UpdatedAt            time.Time    `json:"updatedAt"`
 	Data                 proposalData `json:"data"`
-	RoadmapImage         bool         `json:"roadmapImage"`
-	MethodImage          bool         `json:"methodImage"`
-	Verification         string       `json:"verification"`
+	RoadmapImage         bool            `json:"roadmapImage"`
+	MethodImage          bool            `json:"methodImage"`
+	StudentLetterFile    bool            `json:"studentLetterFile"`
+	Verification         string          `json:"verification"`
+	WorkflowStatus       string          `json:"workflowStatus"`
+	FundingDecision      string          `json:"fundingDecision"`
+	ApprovedBudget       *string         `json:"approvedBudget"`
+	DecisionNote         string          `json:"decisionNote"`
+	Consents             []memberConsent `json:"consents"`
+	Approvals            []approvalEntry `json:"approvals,omitempty"`
+	PublicReviews        []reviewRow     `json:"publicReviews,omitempty"`
 }
 
 const proposalSelectFields = `SELECT p.id,p.grant_version_id,v.period_id,v.scheme_id,v.version_no,(v.active_lecturer OR v.manual_requirements<>''),p.research_field_id,p.title,p.status,p.revision,
- CAST(p.budget_idr AS CHAR),v.scheme_name,g.name,u.display_name,p.updated_at,`
+ CAST(p.budget_idr AS CHAR),v.scheme_name,g.name,u.display_name,p.updated_at,p.workflow_status,p.funding_decision,CAST(p.approved_budget_idr AS CHAR),p.decision_note,`
 const proposalSelectJoins = `,
  EXISTS(SELECT 1 FROM research_proposal_images i WHERE i.proposal_id=p.id AND i.kind='roadmap'),
  EXISTS(SELECT 1 FROM research_proposal_images i WHERE i.proposal_id=p.id AND i.kind='method'),
+ EXISTS(SELECT 1 FROM research_proposal_images i WHERE i.proposal_id=p.id AND i.kind='student_letter'),
  CASE WHEN p.verified_revision=p.revision THEN 'verified' WHEN p.verification_requested THEN 'requested' ELSE 'none' END
  FROM research_proposals p JOIN grant_scheme_versions v ON v.institution_id=p.institution_id AND v.id=p.grant_version_id
  JOIN grant_periods g ON g.institution_id=v.institution_id AND g.id=v.period_id
@@ -60,9 +69,14 @@ type rowScanner interface{ Scan(...any) error }
 func readProposal(row rowScanner) (proposal, error) {
 	var item proposal
 	var payload []byte
-	err := row.Scan(&item.ID, &item.GrantVersionID, &item.PeriodID, &item.SchemeID, &item.GrantVersion, &item.RequiresVerification, &item.FieldID, &item.Title, &item.Status, &item.Revision, &item.Budget, &item.Scheme, &item.Period, &item.Owner, &item.UpdatedAt, &payload, &item.RoadmapImage, &item.MethodImage, &item.Verification)
+	var approved sql.NullString
+	err := row.Scan(&item.ID, &item.GrantVersionID, &item.PeriodID, &item.SchemeID, &item.GrantVersion, &item.RequiresVerification, &item.FieldID, &item.Title, &item.Status, &item.Revision, &item.Budget, &item.Scheme, &item.Period, &item.Owner, &item.UpdatedAt, &item.WorkflowStatus, &item.FundingDecision, &approved, &item.DecisionNote, &payload, &item.RoadmapImage, &item.MethodImage, &item.StudentLetterFile, &item.Verification)
 	if err != nil {
 		return item, err
+	}
+	if approved.Valid {
+		val := approved.String
+		item.ApprovedBudget = &val
 	}
 	return item, json.Unmarshal(payload, &item.Data)
 }
@@ -136,6 +150,18 @@ func (s service) getProposal(c *gin.Context, a actor) {
 	if err != nil {
 		c.Status(503)
 		return
+	}
+	consents, err := loadProposalConsents(c.Request.Context(), s.db, a.tenant, item.ID)
+	if err != nil {
+		c.Status(503)
+		return
+	}
+	item.Consents = consents
+	if apps, err := loadApprovalsForProposal(c.Request.Context(), s.db, a.tenant, item.ID); err == nil {
+		item.Approvals = apps
+	}
+	if revs, err := loadPublicReviewsForProposal(c.Request.Context(), s.db, a.tenant, item.ID); err == nil {
+		item.PublicReviews = revs
 	}
 	c.JSON(200, item)
 }
@@ -233,26 +259,33 @@ func (s service) saveProposal(c *gin.Context, a actor) {
 		if err := resolveBudgetCategories(ctx, tx, a.tenant, &input.Data, false); err != nil {
 			return 0, err
 		}
+		input.Data.sanitizeNarratives()
 		raw, err := json.Marshal(input.Data)
 		if err != nil {
 			return 0, err
 		}
-		_, err = tx.ExecContext(ctx, `UPDATE research_proposals SET title=?,research_field_id=?,payload=?,budget_idr=?,revision=revision+1,verification_requested=FALSE WHERE id=?`,
-			strings.TrimSpace(input.Title), input.FieldID, string(raw), budget, id)
-		return id, err
+		if _, err := tx.ExecContext(ctx, `UPDATE research_proposals SET title=?,research_field_id=?,payload=?,budget_idr=?,revision=revision+1,verification_requested=FALSE WHERE id=?`,
+			strings.TrimSpace(input.Title), input.FieldID, string(raw), budget, id); err != nil {
+			return 0, err
+		}
+		if err := syncProposalConsents(ctx, tx, a.tenant, id, input.Data.Team); err != nil {
+			return 0, err
+		}
+		return id, nil
 	})
 }
 
 func lockDraft(ctx context.Context, tx *sql.Tx, a actor, id int64, revision int) (int64, error) {
 	var version int64
 	var found int
-	var status string
-	err := tx.QueryRowContext(ctx, `SELECT grant_version_id,revision,status FROM research_proposals
- WHERE institution_id=? AND owner_user_id=? AND id=? FOR UPDATE`, a.tenant, a.ID, id).Scan(&version, &found, &status)
+	var status, wf string
+	err := tx.QueryRowContext(ctx, `SELECT grant_version_id,revision,status,workflow_status FROM research_proposals
+ WHERE institution_id=? AND owner_user_id=? AND id=? FOR UPDATE`, a.tenant, a.ID, id).Scan(&version, &found, &status, &wf)
 	if err != nil {
 		return 0, err
 	}
-	if found != revision || status != "draft" {
+	editable := status == "draft" || (status == "submitted" && (wf == "admin_revision" || wf == "review_revision"))
+	if found != revision || !editable {
 		return 0, staleProposal
 	}
 	return version, nil
@@ -290,22 +323,32 @@ func (s service) submitProposal(c *gin.Context, a actor) {
 		if !grant.open || !grant.current {
 			return 0, unavailableGrant
 		}
-		var matches, active int
+		var matches, active, withCode int
 		if grant.required {
-			if err := tx.QueryRowContext(ctx, "SELECT COUNT(*),COALESCE(SUM(is_active),0) FROM lecturers WHERE institution_id=? AND email=?", a.tenant, a.Email).Scan(&matches, &active); err != nil {
+			if err := tx.QueryRowContext(ctx, "SELECT COUNT(*),COALESCE(SUM(is_active),0),COALESCE(SUM(is_active AND TRIM(code)<>'' AND TRIM(code)<>'-'),0) FROM lecturers WHERE institution_id=? AND email=?", a.tenant, a.Email).Scan(&matches, &active, &withCode); err != nil {
 				return 0, err
 			}
+		}
+		overdue, err := countOverdueReports(ctx, tx, a.tenant, a.ID, grant.period)
+		if err != nil {
+			return 0, err
 		}
 		item, err := readProposal(tx.QueryRowContext(ctx, proposalSelect+" WHERE p.id=?", id))
 		if err != nil {
 			return 0, err
 		}
-		eligibility, reasons := assessEligibility(grant.open, grant.current, grant.required, grant.manual, matches, active)
+		eligibility, reasons := assessEligibility(grant.open, grant.current, grant.required, grant.manual, matches, active, withCode, overdue)
 		if eligibility == "ineligible" || (eligibility == "manual" && item.Verification != "verified") {
 			return 0, fmt.Errorf("%w: %s", eligibilityBlocked, strings.Join(reasons, " "))
 		}
 		if err := resolveBudgetCategories(ctx, tx, a.tenant, &item.Data, true); err != nil {
 			return 0, err
+		}
+		if err := checkProposalConsentsApproved(ctx, tx, a.tenant, id); err != nil {
+			return 0, err
+		}
+		if len(item.Data.Students) > 0 && !item.StudentLetterFile {
+			return 0, fmt.Errorf("%w: penelitian yang melibatkan mahasiswa harus menyertakan unggahan Surat Keterlibatan Mahasiswa (PDF/JPG/PNG)", invalidProposal)
 		}
 		if err := item.Data.validateSubmission(item.Title, item.FieldID, grant); err != nil {
 			return 0, fmt.Errorf("%w: %s", invalidProposal, err)
@@ -332,8 +375,14 @@ func (s service) submitProposal(c *gin.Context, a actor) {
 		if err != nil {
 			return 0, err
 		}
-		_, err = tx.ExecContext(ctx, "UPDATE research_proposals SET status='submitted',payload=?,submitted_at=UTC_TIMESTAMP(6),revision=revision+1 WHERE id=?", string(raw), id)
-		return id, err
+		if _, err := tx.ExecContext(ctx, "UPDATE research_proposals SET status='submitted',workflow_status='submitted',payload=?,submitted_at=UTC_TIMESTAMP(6),revision=revision+1 WHERE id=?", string(raw), id); err != nil {
+			return 0, err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO proposal_approvals (institution_id, proposal_id, from_status, to_status, actor_user_id, role_name, note, revision)
+ VALUES (?,?,?,?,?,?,?,?)`, a.tenant, id, "draft", "submitted", a.ID, a.role, "Usulan dikirim oleh peneliti", item.Revision+1); err != nil {
+			return 0, err
+		}
+		return id, nil
 	})
 }
 

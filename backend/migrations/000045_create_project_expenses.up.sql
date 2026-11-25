@@ -1,0 +1,17 @@
+CREATE TABLE project_expenses (
+ id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+ institution_id BIGINT UNSIGNED NOT NULL,
+ proposal_id BIGINT UNSIGNED NOT NULL,
+ category VARCHAR(120) NOT NULL,
+ item_name VARCHAR(250) NOT NULL,
+ justification VARCHAR(500) NOT NULL DEFAULT '',
+ quantity DECIMAL(12,3) NOT NULL DEFAULT 1.000,
+ unit VARCHAR(60) NOT NULL DEFAULT 'unit',
+ unit_price_idr BIGINT UNSIGNED NOT NULL DEFAULT 0,
+ total_idr BIGINT UNSIGNED NOT NULL DEFAULT 0,
+ spent_at DATE NULL,
+ created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+ INDEX ix_expense_proposal (institution_id, proposal_id, id),
+ FOREIGN KEY (proposal_id) REFERENCES research_proposals(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -261,13 +262,14 @@ func (s service) grantEligibility(c *gin.Context, a actor) {
 		return
 	}
 	ctx := c.Request.Context()
+	var periodID int64
 	var required, open, current bool
 	var manual string
-	err := s.db.QueryRowContext(ctx, `SELECT v.active_lecturer,v.manual_requirements,
+	err := s.db.QueryRowContext(ctx, `SELECT v.period_id,v.active_lecturer,v.manual_requirements,
   p.opens_at<=UTC_TIMESTAMP() AND p.closes_at>UTC_TIMESTAMP(),
   v.version_no=(SELECT MAX(x.version_no) FROM grant_scheme_versions x WHERE x.institution_id=v.institution_id AND x.period_id=v.period_id AND x.scheme_id=v.scheme_id)
   FROM grant_scheme_versions v JOIN grant_periods p ON p.id=v.period_id AND p.institution_id=v.institution_id
-  WHERE v.institution_id=? AND v.id=?`, a.tenant, id).Scan(&required, &manual, &open, &current)
+  WHERE v.institution_id=? AND v.id=?`, a.tenant, id).Scan(&periodID, &required, &manual, &open, &current)
 	if err == sql.ErrNoRows {
 		c.Status(404)
 		return
@@ -280,34 +282,69 @@ func (s service) grantEligibility(c *gin.Context, a actor) {
 		c.Status(404)
 		return
 	}
-	result, reasons := assessEligibility(open, current, required, manual, 0, 0)
-	if open && current && required {
-		var matches, active int
-		if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*),COALESCE(SUM(is_active),0) FROM lecturers WHERE institution_id=? AND email=?", a.tenant, a.Email).Scan(&matches, &active); err != nil {
+	var matches, active, withCode, overdue int
+	if open && current {
+		if required {
+			if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*),COALESCE(SUM(is_active),0),COALESCE(SUM(is_active AND TRIM(code)<>'' AND TRIM(code)<>'-'),0) FROM lecturers WHERE institution_id=? AND email=?", a.tenant, a.Email).Scan(&matches, &active, &withCode); err != nil {
+				c.Status(503)
+				return
+			}
+		}
+		var ovErr error
+		overdue, ovErr = countOverdueReports(ctx, s.db, a.tenant, a.ID, periodID)
+		if ovErr != nil {
 			c.Status(503)
 			return
 		}
-		result, reasons = assessEligibility(open, current, required, manual, matches, active)
 	}
+	result, reasons := assessEligibility(open, current, required, manual, matches, active, withCode, overdue)
 	c.JSON(http.StatusOK, gin.H{"result": result, "reasons": reasons})
 }
 
-func assessEligibility(open, current, required bool, manual string, matches, active int) (string, []string) {
+type queryRower interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+func countOverdueReports(ctx context.Context, q queryRower, tenant, userID, currentPeriodID int64) (int, error) {
+	var overdue int
+	err := q.QueryRowContext(ctx, `SELECT COUNT(*)
+ FROM research_proposals p
+ JOIN grant_scheme_versions v ON v.institution_id=p.institution_id AND v.id=p.grant_version_id
+ JOIN grant_periods g ON g.institution_id=v.institution_id AND g.id=v.period_id
+ WHERE p.institution_id=? AND p.owner_user_id=? AND p.funding_decision='funded'
+   AND v.period_id<>? AND g.closes_at<UTC_TIMESTAMP()
+   AND NOT EXISTS (
+     SELECT 1 FROM research_reports r
+     WHERE r.institution_id=p.institution_id AND r.proposal_id=p.id AND r.kind='final' AND r.is_active AND JSON_LENGTH(r.payload)>0
+   )`, tenant, userID, currentPeriodID).Scan(&overdue)
+	return overdue, err
+}
+
+func assessEligibility(open, current, required bool, manual string, matches, active, withCode, overdue int) (string, []string) {
 	if !open || !current {
 		return "ineligible", []string{"Periode belum dibuka, sudah ditutup, atau versi ini sudah digantikan."}
 	}
 	status := "eligible"
 	reasons := []string{}
+	if overdue > 0 {
+		status = "ineligible"
+		reasons = append(reasons, fmt.Sprintf("Terdapat %d tunggakan laporan akhir penelitian/pengmas periode sebelumnya yang belum diselesaikan.", overdue))
+	}
 	if required {
 		switch {
 		case matches != 1:
-			status = "manual"
+			if status == "eligible" {
+				status = "manual"
+			}
 			reasons = append(reasons, "Status dosen belum dapat diverifikasi. Data dosen harus memakai email akun yang sama dan unik di institusi.")
 		case active != 1:
 			status = "ineligible"
 			reasons = append(reasons, "Status dosen tercatat nonaktif.")
+		case withCode != 1:
+			status = "ineligible"
+			reasons = append(reasons, "Dosen wajib memiliki NIDN / NUPTK / NIK yang valid pada Master Data Dosen.")
 		default:
-			reasons = append(reasons, "Status dosen aktif terverifikasi.")
+			reasons = append(reasons, "Status dosen aktif dan NIDN/NUPTK/NIK terverifikasi.")
 		}
 	}
 	if manual != "" {
