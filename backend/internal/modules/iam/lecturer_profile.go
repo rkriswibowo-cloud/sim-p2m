@@ -160,7 +160,7 @@ func (s service) listLecturersWithAccounts(c *gin.Context, a actor) {
  LEFT JOIN study_programs sp ON sp.institution_id=l.institution_id AND sp.id=l.parent_id
  LEFT JOIN users u ON u.id=l.user_id
  WHERE l.institution_id=?
- ORDER BY l.is_active DESC, l.name ASC LIMIT 200`, a.tenant)
+ ORDER BY l.is_active DESC, l.name ASC LIMIT 5000`, a.tenant)
 	if err != nil {
 		c.Status(503)
 		return
@@ -186,6 +186,7 @@ func (s service) listLecturersWithAccounts(c *gin.Context, a actor) {
 func (s service) linkLecturerAccount(c *gin.Context, a actor) {
 	lecturerID := target(c)
 	var input struct {
+		UserID   int64  `json:"userId"`
 		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
@@ -193,10 +194,14 @@ func (s service) linkLecturerAccount(c *gin.Context, a actor) {
 		c.Status(400)
 		return
 	}
-	email, ok := auth.NormalizeEmail(input.Email)
-	if !ok {
-		c.JSON(400, gin.H{"error": "validation", "message": "Format email akun tidak valid."})
-		return
+	var email string
+	if input.UserID == 0 {
+		var ok bool
+		email, ok = auth.NormalizeEmail(input.Email)
+		if !ok {
+			c.JSON(400, gin.H{"error": "validation", "message": "Format email akun tidak valid."})
+			return
+		}
 	}
 	password := input.Password
 	var passwordHash string
@@ -216,21 +221,31 @@ func (s service) linkLecturerAccount(c *gin.Context, a actor) {
 		}
 
 		var userID int64
-		err := tx.QueryRowContext(ctx, "SELECT id FROM users WHERE email=? FOR UPDATE", email).Scan(&userID)
-		if errors.Is(err, sql.ErrNoRows) {
-			if passwordHash == "" {
-				return 0, fmt.Errorf("%w: akun email belum terdaftar; isi kata sandi (minimal 12 karakter) untuk membuat akun dosen baru", invalidProposal)
+		if input.UserID > 0 {
+			err := tx.QueryRowContext(ctx, "SELECT id, email FROM users WHERE id=? AND is_active FOR UPDATE", input.UserID).Scan(&userID, &email)
+			if errors.Is(err, sql.ErrNoRows) {
+				return 0, fmt.Errorf("%w: user sistem yang dipilih tidak ditemukan atau nonaktif", invalidProposal)
 			}
-			res, err := tx.ExecContext(ctx, "INSERT INTO users (email, display_name, password_hash, is_active) VALUES (?,?,?,TRUE)", email, lName, passwordHash)
 			if err != nil {
 				return 0, err
 			}
-			userID, err = res.LastInsertId()
-			if err != nil {
+		} else {
+			err := tx.QueryRowContext(ctx, "SELECT id FROM users WHERE email=? FOR UPDATE", email).Scan(&userID)
+			if errors.Is(err, sql.ErrNoRows) {
+				if passwordHash == "" {
+					return 0, fmt.Errorf("%w: akun email belum terdaftar; isi kata sandi (minimal 12 karakter) untuk membuat akun dosen baru", invalidProposal)
+				}
+				res, err := tx.ExecContext(ctx, "INSERT INTO users (email, display_name, password_hash, is_active) VALUES (?,?,?,TRUE)", email, lName, passwordHash)
+				if err != nil {
+					return 0, err
+				}
+				userID, err = res.LastInsertId()
+				if err != nil {
+					return 0, err
+				}
+			} else if err != nil {
 				return 0, err
 			}
-		} else if err != nil {
-			return 0, err
 		}
 
 		// Ensure active membership in institution
@@ -261,5 +276,117 @@ func (s service) linkLecturerAccount(c *gin.Context, a actor) {
 		}
 		return lecturerID, nil
 	})
+}
+
+type systemUserOption struct {
+	ID                 int64  `json:"id"`
+	Email              string `json:"email"`
+	Name               string `json:"name"`
+	LinkedLecturerID   *int64 `json:"linkedLecturerId"`
+	LinkedLecturerName string `json:"linkedLecturerName"`
+}
+
+func (s service) listSystemUserOptions(c *gin.Context, a actor) {
+	rows, err := s.db.QueryContext(c.Request.Context(), `SELECT u.id, u.email, u.display_name, l.id, COALESCE(l.name,'')
+ FROM users u
+ LEFT JOIN lecturers l ON l.institution_id=? AND l.user_id=u.id
+ WHERE u.is_active
+ ORDER BY u.display_name ASC, u.email ASC
+ LIMIT 5000`, a.tenant)
+	if err != nil {
+		c.Status(503)
+		return
+	}
+	defer rows.Close()
+	items := []systemUserOption{}
+	for rows.Next() {
+		var item systemUserOption
+		var lid sql.NullInt64
+		if err := rows.Scan(&item.ID, &item.Email, &item.Name, &lid, &item.LinkedLecturerName); err != nil {
+			c.Status(503)
+			return
+		}
+		if lid.Valid {
+			v := lid.Int64
+			item.LinkedLecturerID = &v
+		}
+		items = append(items, item)
+	}
+	c.JSON(200, items)
+}
+
+func (s service) syncLecturerAccounts(c *gin.Context, a actor) {
+	ctx := c.Request.Context()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		c.Status(503)
+		return
+	}
+	defer tx.Rollback()
+
+	var synced int64
+	rows, err := tx.QueryContext(ctx, `SELECT l.id, u.id
+ FROM lecturers l
+ JOIN users u ON LOWER(TRIM(l.email))=LOWER(u.email) AND u.is_active
+ WHERE l.institution_id=? AND l.user_id IS NULL AND TRIM(COALESCE(l.email,''))<>''
+   AND NOT EXISTS (SELECT 1 FROM lecturers x WHERE x.institution_id=l.institution_id AND x.user_id=u.id)
+ FOR UPDATE`, a.tenant)
+	if err != nil {
+		c.Status(503)
+		return
+	}
+	type pair struct{ lecturerID, userID int64 }
+	var pairs []pair
+	for rows.Next() {
+		var p pair
+		if err := rows.Scan(&p.lecturerID, &p.userID); err != nil {
+			rows.Close()
+			c.Status(503)
+			return
+		}
+		pairs = append(pairs, p)
+	}
+	if err := rows.Close(); err != nil {
+		c.Status(503)
+		return
+	}
+	seenUsers := map[int64]bool{}
+	for _, p := range pairs {
+		if seenUsers[p.userID] {
+			continue
+		}
+		seenUsers[p.userID] = true
+		if _, err := tx.ExecContext(ctx, `INSERT INTO memberships (institution_id, user_id, is_active) VALUES (?,?,TRUE)
+ ON DUPLICATE KEY UPDATE is_active=TRUE`, a.tenant, p.userID); err != nil {
+			c.Status(503)
+			return
+		}
+		var permCount int
+		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM membership_permissions WHERE institution_id=? AND user_id=?", a.tenant, p.userID).Scan(&permCount); err != nil {
+			c.Status(503)
+			return
+		}
+		if permCount == 0 {
+			for _, code := range []string{"", grantRead, researchApply, documentsRead, reportsDraft} {
+				if _, err := tx.ExecContext(ctx, "INSERT IGNORE INTO membership_permissions (institution_id, user_id, permission_code) VALUES (?,?,?)", a.tenant, p.userID, code); err != nil {
+					c.Status(503)
+					return
+				}
+			}
+		}
+		res, err := tx.ExecContext(ctx, "UPDATE lecturers SET user_id=? WHERE institution_id=? AND id=? AND user_id IS NULL", p.userID, a.tenant, p.lecturerID)
+		if err != nil {
+			c.Status(503)
+			return
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			synced += n
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		c.Status(503)
+		return
+	}
+	c.JSON(200, gin.H{"synced": synced})
 }
 

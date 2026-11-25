@@ -104,6 +104,8 @@ func (s service) routes(r *gin.RouterGroup) {
 	r.GET("/institutions/:institution/my-lecturer-profile", s.scoped(read, s.getMyLecturerProfile))
 	r.PUT("/institutions/:institution/my-lecturer-profile", s.mutation(read, s.updateMyLecturerProfile))
 	r.GET("/institutions/:institution/lecturers-with-accounts", s.scoped(masterRead, s.listLecturersWithAccounts))
+	r.GET("/institutions/:institution/system-user-options", s.scoped(masterRead, s.listSystemUserOptions))
+	r.POST("/institutions/:institution/lecturers/sync-accounts", s.mutation(masterManage, s.syncLecturerAccounts))
 	r.POST("/institutions/:institution/lecturers/:target/link-account", s.mutation(masterManage, s.linkLecturerAccount))
 	r.GET("/institutions/:institution/community", s.scoped(communityDraft, s.listCommunity))
 	r.POST("/institutions/:institution/community", s.mutationWithLimit(communityDraft, s.saveCommunity, 128<<10))
