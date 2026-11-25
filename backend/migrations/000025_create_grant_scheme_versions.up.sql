@@ -1,0 +1,21 @@
+CREATE TABLE grant_scheme_versions (
+ id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+ institution_id BIGINT UNSIGNED NOT NULL,
+ period_id BIGINT UNSIGNED NOT NULL,
+ scheme_id BIGINT UNSIGNED NOT NULL,
+ funding_source_id BIGINT UNSIGNED NOT NULL,
+ version_no INT UNSIGNED NOT NULL,
+ scheme_name VARCHAR(200) NOT NULL,
+ source_name VARCHAR(200) NOT NULL,
+ budget_idr BIGINT UNSIGNED NOT NULL,
+ quota INT UNSIGNED NOT NULL,
+ duration_months SMALLINT UNSIGNED NOT NULL,
+ active_lecturer BOOLEAN NOT NULL,
+ manual_requirements VARCHAR(2000) NOT NULL,
+ published_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+ UNIQUE KEY uq_grant_version (institution_id,period_id,scheme_id,version_no),
+ FOREIGN KEY (institution_id,period_id) REFERENCES grant_periods(institution_id,id),
+ FOREIGN KEY (institution_id,scheme_id) REFERENCES schemes(institution_id,id),
+ FOREIGN KEY (institution_id,funding_source_id) REFERENCES funding_sources(institution_id,id),
+ CHECK (quota>0 AND duration_months>0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -1,0 +1,22 @@
+CREATE TABLE research_proposals (
+ id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+ institution_id BIGINT UNSIGNED NOT NULL,
+ owner_user_id BIGINT UNSIGNED NOT NULL,
+ grant_version_id BIGINT UNSIGNED NOT NULL,
+ research_field_id BIGINT UNSIGNED NULL,
+ title VARCHAR(300) NOT NULL DEFAULT '',
+ payload JSON NOT NULL,
+ revision INT UNSIGNED NOT NULL DEFAULT 1,
+ status ENUM('draft','submitted','archived') NOT NULL DEFAULT 'draft',
+ budget_idr BIGINT UNSIGNED NOT NULL DEFAULT 0,
+ submitted_at DATETIME(6) NULL,
+ verification_requested BOOLEAN NOT NULL DEFAULT FALSE,
+ verified_revision INT UNSIGNED NULL,
+ created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+ updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+ INDEX ix_proposal_owner (institution_id,owner_user_id,status,id),
+ INDEX ix_proposal_grant (institution_id,grant_version_id,status),
+ FOREIGN KEY (institution_id,owner_user_id) REFERENCES memberships(institution_id,user_id),
+ FOREIGN KEY (institution_id,grant_version_id) REFERENCES grant_scheme_versions(institution_id,id),
+ FOREIGN KEY (institution_id,research_field_id) REFERENCES research_fields(institution_id,id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
