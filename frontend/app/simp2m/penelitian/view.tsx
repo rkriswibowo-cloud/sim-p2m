@@ -458,11 +458,17 @@ export function ResearchPanel() {
             </div>}
             <div className="flex flex-wrap gap-2 border-t border-border pt-2">
               <a href={`${endpoint}/${proposal.id}/export/proposal-docx`} className="inline-flex items-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent">
-                Unduh Hasil Generate Proposal (.docx)
+                Unduh Proposal (.docx)
               </a>
+              <Button size="sm" type="button" variant="outline" onClick={() => setPrintMode("proposal")}>
+                Pratinjau / PDF Proposal
+              </Button>
               <a href={`${endpoint}/${proposal.id}/export/student-letter-docx`} className="inline-flex items-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent">
                 Unduh Surat Mahasiswa (.docx)
               </a>
+              <Button size="sm" type="button" variant="outline" onClick={() => setPrintMode("student-letter")}>
+                Pratinjau / PDF Surat Mahasiswa
+              </Button>
             </div>
             {proposal.status === "submitted" && <div className="rounded border border-border p-2 space-y-1 text-xs">
               <p><strong>Status Seleksi:</strong> {proposal.workflowStatus ?? "submitted"} · <strong>Keputusan Pendanaan:</strong> {proposal.fundingDecision === "funded" ? "Didanai" : proposal.fundingDecision === "not_funded" ? "Tidak Didanai" : "Menunggu Keputusan"}</p>
