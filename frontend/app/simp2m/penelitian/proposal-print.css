@@ -30,7 +30,11 @@
     color: #111 !important;
     border-radius: 0 !important;
   }
-  .proposal-print-document { page: simp2m-proposal; }
+  .proposal-print-document {
+    page: simp2m-proposal;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
   .proposal-print-document .proposal-print-page-start {
     break-before: page;
     margin-block-start: 0;

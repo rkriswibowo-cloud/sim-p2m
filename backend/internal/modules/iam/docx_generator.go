@@ -220,6 +220,25 @@ func docxTable(headers []string, rows [][]string, colWidths []int) string {
 	return b.String()
 }
 
+func docxBoxedSection(title, guide, contentXML string) string {
+	var b strings.Builder
+	b.WriteString(`<w:tbl><w:tblPr><w:tblW w:w="9000" w:type="dxa"/><w:tblBorders>`)
+	for _, side := range []string{"top", "left", "bottom", "right", "insideH", "insideV"} {
+		b.WriteString(fmt.Sprintf(`<w:%s w:val="single" w:sz="6" w:space="0" w:color="000000"/>`, side))
+	}
+	b.WriteString(`</w:tblBorders></w:tblPr><w:tblGrid><w:gridCol w:w="9000"/></w:tblGrid>`)
+	b.WriteString(`<w:tr><w:trPr><w:cantSplit/></w:trPr><w:tc><w:tcPr><w:tcW w:w="9000" w:type="dxa"/><w:shd w:val="clear" w:color="auto" w:fill="8EAADB"/><w:tcMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tcMar></w:tcPr>`)
+	b.WriteString(strings.Replace(docxParagraph(title, true, 22, "left", 40), "<w:pPr>", "<w:pPr><w:keepNext/>", 1))
+	b.WriteString(`</w:tc></w:tr>`)
+	b.WriteString(`<w:tr><w:trPr><w:cantSplit/></w:trPr><w:tc><w:tcPr><w:tcW w:w="9000" w:type="dxa"/><w:shd w:val="clear" w:color="auto" w:fill="BDD0E9"/><w:tcMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tcMar></w:tcPr>`)
+	b.WriteString(docxParagraph(guide, false, 20, "left", 40))
+	b.WriteString(`</w:tc></w:tr>`)
+	b.WriteString(`<w:tr><w:tc><w:tcPr><w:tcW w:w="9000" w:type="dxa"/><w:tcMar><w:top w:w="100" w:type="dxa"/><w:bottom w:w="100" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tcMar></w:tcPr>`)
+	b.WriteString(contentXML)
+	b.WriteString(`</w:tc></w:tr></w:tbl><w:p><w:pPr><w:spacing w:after="100"/></w:pPr></w:p>`)
+	return b.String()
+}
+
 type docxDiagram struct {
 	Index         int
 	Label         string
@@ -536,76 +555,119 @@ func (s service) exportProposalDocx(c *gin.Context, a actor) {
 	body.WriteString(docxParagraph("9. Jurnal Ilmiah yang menjadi sasaran publikasi", true, 22, "left", 60))
 	body.WriteString(docxParagraph(d.Journal, false, 22, "left", 160))
 
-	body.WriteString(docxHeading("A. PETA JALAN PENELITIAN", "left", false))
-	body.WriteString(docxRichParagraphs(d.Roadmap))
+	body.WriteString(docxHeading(fmt.Sprintf("PROPOSAL PENELITIAN - %s TAHUN %d/%d", strings.ToUpper(meta.InstitutionName), meta.FiscalYear, meta.FiscalYear+1), "right", true))
+
+	var secA strings.Builder
+	secA.WriteString(docxRichParagraphs(d.Roadmap))
 	if diagram, ok := diagrams["roadmap"]; ok {
-		body.WriteString(diagram.drawing())
+		secA.WriteString(diagram.drawing())
 		embedded = append(embedded, diagram)
 	}
-	body.WriteString(docxHeading("B. RINGKASAN", "left", false))
-	body.WriteString(docxRichParagraphs(d.Summary))
-	body.WriteString(docxHeading("C. KATA KUNCI", "left", false))
-	body.WriteString(docxParagraph(strings.Join(d.Keywords, ", "), false, 22, "left", 80))
+	body.WriteString(docxBoxedSection(
+		"A. PETA JALAN PENELITIAN (ROAD MAP)",
+		"Tuliskan peta jalan penelitian dari tahapan yang telah dicapai, tahapan yang akan dilakukan selama jangka waktu penelitian, dan tahapan yang direncanakan. Bagan dan road map dibuat dalam bentuk JPG/PNG yang kemudian disisipkan dalam isian ini.",
+		secA.String(),
+	))
+
+	body.WriteString(docxBoxedSection(
+		"B. RINGKASAN",
+		"Ringkasan dijelaskan tidak lebih dari 1 halaman dengan font Tahoma ukuran 11 spasi 1,15 yang berisi uraian latar belakang penelitian, tujuan dan tahapan metode penelitian, luaran yang ditargetkan.",
+		docxRichParagraphs(d.Summary),
+	))
+
+	var secC strings.Builder
+	kw := strings.Join(d.Keywords, ", ")
+	if kw == "" {
+		kw = "-"
+	}
+	secC.WriteString(docxParagraph(kw, false, 22, "left", 60))
 	if d.SDGKeywords != "" {
-		body.WriteString(docxParagraph("Kata Kunci SDGs: "+d.SDGKeywords, false, 22, "left", 160))
+		secC.WriteString(docxParagraph("Kata Kunci SDGs: "+d.SDGKeywords, false, 22, "left", 60))
 	}
+	body.WriteString(docxBoxedSection(
+		"C. KATA KUNCI",
+		"Cantumkan pula lima kata kunci (key words) yang paling dominan dan ditambah kata kunci yang berkaitan dengan SDGs (Sustainable Development Goals).",
+		secC.String(),
+	))
 
-	body.WriteString(docxHeading("D. PENDAHULUAN", "left", false))
-	body.WriteString(docxRichParagraphs(d.Introduction))
+	body.WriteString(docxBoxedSection(
+		"D. PENDAHULUAN",
+		"Pendahuluan dijelaskan tidak lebih dari 1.000 kata dengan font Tahoma ukuran 11 spasi 1,15 yang berisi uraian: Latar belakang dan rumusan permasalahan; Pendekatan pemecahan masalah; State of the art dan kebaruan.",
+		docxRichParagraphs(d.Introduction),
+	))
 
-	body.WriteString(docxHeading("E. TINJAUAN PUSTAKA", "left", false))
-	body.WriteString(docxRichParagraphs(d.Literature))
+	body.WriteString(docxBoxedSection(
+		"E. TINJAUAN PUSTAKA",
+		"Tinjauan Pustaka dijelaskan dengan font Tahoma ukuran 11 spasi 1,15 yang mengemukakan Sumber pustaka/referensi primer yang relevan dan mengutamakan jurnal ilmiah/paten terkini (10 tahun terakhir).",
+		docxRichParagraphs(d.Literature),
+	))
 
-	body.WriteString(docxHeading("F. METODE", "left", false))
-	body.WriteString(docxRichParagraphs(d.Method))
+	var secF strings.Builder
+	secF.WriteString(docxRichParagraphs(d.Method))
 	if diagram, ok := diagrams["method"]; ok {
-		body.WriteString(diagram.drawing())
+		secF.WriteString(diagram.drawing())
 		embedded = append(embedded, diagram)
 	}
+	body.WriteString(docxBoxedSection(
+		"F. METODE",
+		"Metode dijelaskan dengan font Tahoma ukuran 11 spasi 1,15, wajib dilengkapi diagram alir penelitian (JPG/PNG) serta memuat proses, luaran, indikator capaian, dan penanggung jawab.",
+		secF.String(),
+	))
 
-	body.WriteString(docxHeading("G. HASIL YANG DIHARAPKAN", "left", false))
-	body.WriteString(docxRichParagraphs(d.Expected))
+	var secG strings.Builder
+	secG.WriteString(docxRichParagraphs(d.Expected))
 	if len(d.Outputs) > 0 {
 		outRows := [][]string{}
 		for i, o := range d.Outputs {
 			outRows = append(outRows, []string{strconv.Itoa(i + 1), o.Kind, o.Status, strconv.Itoa(o.Year)})
 		}
-		body.WriteString(docxTable([]string{"No", "Jenis Luaran", "Status Target", "Tahun"}, outRows, []int{800, 4200, 2600, 1400}))
+		secG.WriteString(docxTable([]string{"No", "Jenis Luaran", "Status Target", "Tahun"}, outRows, []int{700, 4000, 2500, 1400}))
 	}
+	body.WriteString(docxBoxedSection(
+		"G. HASIL YANG DIHARAPKAN",
+		"Jelaskan hasil yang diharapkan atau luaran yang dijanjikan dari penelitian.",
+		secG.String(),
+	))
 
-	body.WriteString(docxHeading("H. ANGGARAN BIAYA", "left", false))
-	if len(d.Costs) > 0 {
-		costRows := [][]string{}
-		for _, cost := range d.Costs {
-			costRows = append(costRows, []string{
-				cost.Category,
-				cost.Item + " (" + cost.Reason + ")",
-				cost.Quantity + " " + cost.Unit,
-				formatRupiahID(cost.Price),
-				formatSubtotalRupiah(cost.Quantity, cost.Price),
-			})
+	var secH strings.Builder
+	secH.WriteString(docxParagraph("Tabel. Rencana Anggaran Biaya Penelitian", true, 20, "left", 80))
+	costRows := [][]string{}
+	for i, cost := range d.Costs {
+		desc := cost.Category + ": " + cost.Item + " (" + cost.Quantity + " " + cost.Unit + ")"
+		if cost.Reason != "" {
+			desc += " - " + cost.Reason
 		}
-		costRows = append(costRows, []string{"", "TOTAL ANGGARAN DIUSULKAN", "", "", formatRupiahID(p.Budget)})
-		body.WriteString(docxTable([]string{"Kategori", "Item & Justifikasi", "Volume", "Harga Satuan", "Subtotal"}, costRows, []int{1700, 3100, 1200, 1500, 1500}))
+		costRows = append(costRows, []string{strconv.Itoa(i + 1), desc, formatSubtotalRupiah(cost.Quantity, cost.Price)})
 	}
+	costRows = append(costRows, []string{"", "TOTAL", formatRupiahID(p.Budget)})
+	secH.WriteString(docxTable([]string{"No", "Jenis Pengeluaran", "Biaya yang diusulkan (Rp)"}, costRows, []int{700, 5700, 2200}))
+	body.WriteString(docxBoxedSection(
+		"H. ANGGARAN BIAYA",
+		"Justifikasi anggaran biaya ditulis dengan terperinci dan jelas. Pada anggaran biaya tidak diperkenankan adanya honor pelaksana kegiatan.",
+		secH.String(),
+	))
 
-	body.WriteString(docxHeading("I. JADWAL PELAKSANAAN", "left", false))
-	if len(d.Schedule) > 0 {
-		schRows := [][]string{}
-		for i, sch := range d.Schedule {
-			schRows = append(schRows, []string{
-				strconv.Itoa(i + 1),
-				sch.Name,
-				sch.Output,
-				sch.Person,
-				fmt.Sprintf("Bulan %d - %d", sch.From, sch.To),
-			})
-		}
-		body.WriteString(docxTable([]string{"No", "Tahapan", "Luaran", "Penanggung Jawab", "Waktu"}, schRows, []int{700, 2600, 2200, 2000, 1500}))
+	var secI strings.Builder
+	secI.WriteString(docxParagraph("RENCANA JADWAL PELAKSANAAN KEGIATAN", true, 20, "center", 80))
+	schRows := [][]string{}
+	for i, sch := range d.Schedule {
+		schRows = append(schRows, []string{strconv.Itoa(i + 1), sch.Name, fmt.Sprintf("Bulan %d - %d", sch.From, sch.To)})
 	}
+	if len(schRows) == 0 {
+		schRows = append(schRows, []string{"-", "-", "-"})
+	}
+	secI.WriteString(docxTable([]string{"No", "Nama Kegiatan", "Bulan"}, schRows, []int{700, 5900, 2000}))
+	body.WriteString(docxBoxedSection(
+		"I. Jadwal Pelaksanaan",
+		"Jadwal kegiatan selama waktu durasi penelitian dituliskan dengan jelas sesuai pekerjaan, jadwal kegiatan jelas kaitannya dengan tahapan pekerjaan di metodologi.",
+		secI.String(),
+	))
 
-	body.WriteString(docxHeading("J. DAFTAR PUSTAKA", "left", false))
-	body.WriteString(docxRichParagraphs(d.References))
+	body.WriteString(docxBoxedSection(
+		"J. Daftar Pustaka",
+		"Daftar pustaka disusun dan ditulis berdasarkan APA style sesuai dengan urutan pengutipan. Hanya pustaka yang disitasi pada usulan penelitian yang dicantumkan dalam Daftar Pustaka.",
+		docxRichParagraphs(d.References),
+	))
 
 	rawDocx, err := buildDocxBytes(body.String(), embedded...)
 	if err != nil {

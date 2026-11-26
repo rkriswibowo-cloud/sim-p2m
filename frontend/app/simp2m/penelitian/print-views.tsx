@@ -416,81 +416,224 @@ export function PrintPreviewModal({
                 </div>
               </section>
 
-              <section className="space-y-1">
-                <h2 className="text-sm font-bold uppercase">A. Peta Jalan Penelitian</h2>
-                {renderHtmlBlock(d.roadmap)}
-                {proposal.roadmapImage && <DocumentDiagram src={`${imageEndpoint}/roadmap`} label="Diagram peta jalan penelitian" />}
-              </section>
-              <section className="space-y-1">
-                <h2 className="text-sm font-bold uppercase">B. Ringkasan</h2>
-                {renderHtmlBlock(d.summary)}
-              </section>
-              <section className="space-y-1">
-                <h2 className="text-sm font-bold uppercase">C. Kata Kunci</h2>
-                <p>{(d.keywords ?? []).filter(Boolean).join(", ") || "–"}</p>
-                {d.sdgKeywords && <p><strong>Kata kunci SDGs:</strong> {d.sdgKeywords}</p>}
-              </section>
+              {/* Inti Proposal (Boxed Template A–J) */}
+              <div className="proposal-print-page-start space-y-3">
+                <div className="flex items-center justify-between gap-4 pb-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/images/logo-uam.png" alt="Universitas Anwar Medika" className="h-16 w-auto object-contain" />
+                  <div className="text-right font-bold uppercase leading-tight">
+                    <p className="text-base">PROPOSAL PENELITIAN</p>
+                    <p className="text-base">{institutionName || "UNIVERSITAS ANWAR MEDIKA"}</p>
+                    <p className="text-base">TAHUN {proposal.proposalYear ? `${proposal.proposalYear}/${proposal.proposalYear + 1}` : new Date().getFullYear()}</p>
+                  </div>
+                </div>
 
-              <section className="space-y-1">
-                <h2 className="text-sm font-bold uppercase">D. Pendahuluan</h2>
-                {renderHtmlBlock(d.introduction)}
-              </section>
+                <div className="border-[1.5px] border-black text-xs">
+                  {/* A. PETA JALAN */}
+                  <div className="border-b border-black bg-[#8eaadb] px-2.5 py-1.5 font-bold uppercase">
+                    A. PETA JALAN PENELITIAN (<em>ROAD MAP</em>)
+                  </div>
+                  <div className="border-b border-black bg-[#bdd0e9] px-2.5 py-1.5">
+                    Tuliskan peta jalan penelitian dari tahapan yang telah dicapai, tahapan yang akan dilakukan selama jangka waktu penelitian, dan tahapan yang direncanakan. Bagan dan <em>road map</em> dibuat dalam bentuk JPG/PNG yang kemudian disisipkan dalam isian ini.
+                  </div>
+                  <div className="border-b border-black bg-white px-2.5 py-2">
+                    {renderHtmlBlock(d.roadmap)}
+                    {proposal.roadmapImage && <DocumentDiagram src={`${imageEndpoint}/roadmap`} label="Diagram peta jalan penelitian" />}
+                  </div>
 
-              <section className="space-y-1">
-                <h2 className="text-sm font-bold uppercase">E. Tinjauan Pustaka</h2>
-                {renderHtmlBlock(d.literature)}
-              </section>
+                  {/* B. RINGKASAN */}
+                  <div className="border-b border-black bg-[#8eaadb] px-2.5 py-1.5 font-bold uppercase">
+                    B. RINGKASAN
+                  </div>
+                  <div className="border-b border-black bg-[#bdd0e9] px-2.5 py-1.5">
+                    Ringkasan dijelaskan tidak lebih dari 1 halaman dengan font <em>Tahoma</em> ukuran 11 spasi 1,15 yang berisi uraian latar belakang penelitian, tujuan dan tahapan metode penelitian, luaran yang ditargetkan.
+                  </div>
+                  <div className="border-b border-black bg-white px-2.5 py-2">
+                    {renderHtmlBlock(d.summary)}
+                  </div>
 
-              <section className="space-y-1">
-                <h2 className="text-sm font-bold uppercase">F. Metode</h2>
-                {renderHtmlBlock(d.method)}
-                {proposal.methodImage && <DocumentDiagram src={`${imageEndpoint}/method`} label="Diagram metode penelitian" />}
-              </section>
+                  {/* C. KATA KUNCI */}
+                  <div className="border-b border-black bg-[#8eaadb] px-2.5 py-1.5 font-bold uppercase">
+                    C. KATA KUNCI
+                  </div>
+                  <div className="border-b border-black bg-[#bdd0e9] px-2.5 py-1.5">
+                    Cantumkan pula lima kata kunci (<em>key words</em>) yang paling dominan dan ditambah kata kunci yang berkaitan dengan SDGs (Sustainable Development Goals).
+                  </div>
+                  <div className="border-b border-black bg-white px-2.5 py-2 space-y-1">
+                    <p>{(d.keywords ?? []).filter(Boolean).join(", ") || "–"}</p>
+                    {d.sdgKeywords && <p><strong>Kata kunci SDGs:</strong> {d.sdgKeywords}</p>}
+                  </div>
 
-              <section className="space-y-2">
-                <h2 className="text-sm font-bold uppercase">G. Hasil yang Diharapkan</h2>
-                {renderHtmlBlock(d.expected)}
-                {(d.outputs ?? []).length > 0 && (
-                  <table className="w-full border-collapse border border-black text-xs">
-                    <thead><tr className="bg-gray-100"><th className="border border-black px-2 py-1">No</th><th className="border border-black px-2 py-1 text-left">Jenis Luaran</th><th className="border border-black px-2 py-1 text-left">Status</th><th className="border border-black px-2 py-1">Tahun</th></tr></thead>
-                    <tbody>
-                      {(d.outputs ?? []).map((o, i) => (
-                        <tr key={i}><td className="border border-black px-2 py-1 text-center">{i + 1}</td><td className="border border-black px-2 py-1">{String(o.kind || "-")}</td><td className="border border-black px-2 py-1">{String(o.status || "-")}</td><td className="border border-black px-2 py-1 text-center">{String(o.year || "-")}</td></tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </section>
+                  {/* D. PENDAHULUAN */}
+                  <div className="border-b border-black bg-[#8eaadb] px-2.5 py-1.5 font-bold uppercase">
+                    D. PENDAHULUAN
+                  </div>
+                  <div className="border-b border-black bg-[#bdd0e9] px-2.5 py-1.5">
+                    <p>Pendahuluan dijelaskan tidak lebih dari 1.000 kata dengan font <em>Tahoma</em> ukuran 11 spasi 1,15 yang berisi uraian yang terdiri dari :</p>
+                    <ul className="list-disc pl-5">
+                      <li>Latar belakang dan rumusan permasalahan yang akan diteliti</li>
+                      <li>Pendekatan pemecahan masalah</li>
+                      <li><em>State of the art</em> dan kebaruan</li>
+                    </ul>
+                  </div>
+                  <div className="border-b border-black bg-white px-2.5 py-2">
+                    {renderHtmlBlock(d.introduction)}
+                  </div>
 
-              <section className="space-y-2">
-                <h2 className="text-sm font-bold uppercase">H. Anggaran Biaya</h2>
-                {(d.costs ?? []).length > 0 && (
-                  <table className="w-full border-collapse border border-black text-xs">
-                    <thead><tr className="bg-gray-100"><th className="border border-black px-2 py-1 text-left">Kategori</th><th className="border border-black px-2 py-1 text-left">Item dan Justifikasi</th><th className="border border-black px-2 py-1">Volume</th><th className="border border-black px-2 py-1 text-right">Harga Satuan</th><th className="border border-black px-2 py-1 text-right">Subtotal</th></tr></thead>
-                    <tbody>
-                      {(d.costs ?? []).map((c, i) => {
-                        const amount = costAmounts(c.quantity ?? "", c.price ?? "");
-                        return <tr key={i}><td className="border border-black px-2 py-1">{String(c.category || "–")}</td><td className="border border-black px-2 py-1">{String(c.item || "–")}{c.reason && <p className="mt-1">{String(c.reason)}</p>}</td><td className="border border-black px-2 py-1 text-center">{String(c.quantity || "0")} {String(c.unit || "")}</td><td className="border border-black px-2 py-1 text-right">{amount.unit}</td><td className="border border-black px-2 py-1 text-right">{amount.subtotal}</td></tr>;
-                      })}
-                    </tbody>
-                  </table>
-                )}
-                <p className="text-right font-semibold">Total RAB {money.format(BigInt(proposal.budget || "0"))}</p>
-              </section>
+                  {/* E. TINJAUAN PUSTAKA */}
+                  <div className="border-b border-black bg-[#8eaadb] px-2.5 py-1.5 font-bold uppercase">
+                    E. TINJAUAN PUSTAKA
+                  </div>
+                  <div className="border-b border-black bg-[#bdd0e9] px-2.5 py-1.5">
+                    Tinjauan Pustaka dijelaskan dengan font <em>Tahoma</em> ukuran 11 spasi 1,15 yang mengemukakan Sumber pustaka/referensi primer yang relevan dan dengan mengutamakan hasil penelitian pada jurnal ilmiah dan/atau paten yang terkini. Disarankan penggunaan sumber pustaka 10 tahun terakhir.
+                  </div>
+                  <div className="border-b border-black bg-white px-2.5 py-2">
+                    {renderHtmlBlock(d.literature)}
+                  </div>
 
-              <section className="space-y-1">
-                <h2 className="text-sm font-bold uppercase">I. Jadwal Pelaksanaan</h2>
-                {!!d.schedule?.length && <table className="w-full border-collapse border border-black text-xs">
-                  <thead><tr>{["Kegiatan", "Luaran", "Penanggung jawab", "Bulan"].map(label => <th className="border border-black px-2 py-1 text-left" key={label}>{label}</th>)}</tr></thead>
-                  <tbody>{d.schedule.map((row, index) => <tr key={index}>
-                    {[row.name, row.output, row.person, `${row.from || "–"}–${row.to || "–"}`].map((value, column) => <td className="border border-black px-2 py-1" key={column}>{value || "–"}</td>)}
-                  </tr>)}</tbody>
-                </table>}
-              </section>
-              <section className="space-y-1">
-                <h2 className="text-sm font-bold uppercase">J. Daftar Pustaka</h2>
-                {renderHtmlBlock(d.references)}
-              </section>
+                  {/* F. METODE */}
+                  <div className="border-b border-black bg-[#8eaadb] px-2.5 py-1.5 font-bold uppercase">
+                    F. METODE
+                  </div>
+                  <div className="border-b border-black bg-[#bdd0e9] px-2.5 py-1.5">
+                    <p>Metode dijelaskan dengan font <em>Tahoma</em> ukuran 11 spasi 1,15 yang berisi metode atau cara untuk mencapai tujuan yang telah ditetapkan. Pada bagian metode wajib dilengkapi dengan:</p>
+                    <ul className="list-disc pl-5">
+                      <li>Diagram alir penelitian yang menggambarkan apa yang sudah dilaksanakan dan yang akan dikerjakan selama waktu yang diusulkan. Format diagram alir dapat berupa file JPG/PNG.</li>
+                      <li>Metode penelitian harus memuat, sekurang-kurangnya proses, luaran, indikator capaian yang ditargetkan, serta anggota tim/mitra yang bertanggung jawab pada setiap tahapan penelitian.</li>
+                    </ul>
+                  </div>
+                  <div className="border-b border-black bg-white px-2.5 py-2">
+                    {renderHtmlBlock(d.method)}
+                    {proposal.methodImage && <DocumentDiagram src={`${imageEndpoint}/method`} label="Diagram metode penelitian" />}
+                  </div>
+
+                  {/* G. HASIL YANG DIHARAPKAN */}
+                  <div className="border-b border-black bg-[#8eaadb] px-2.5 py-1.5 font-bold uppercase">
+                    G. HASIL YANG DIHARAPKAN
+                  </div>
+                  <div className="border-b border-black bg-[#bdd0e9] px-2.5 py-1.5">
+                    Jelaskan hasil yang diharapkan atau luaran yang dijanjikan dari penelitian
+                  </div>
+                  <div className="border-b border-black bg-white px-2.5 py-2 space-y-2">
+                    {renderHtmlBlock(d.expected)}
+                    {(d.outputs ?? []).length > 0 && (
+                      <table className="w-full border-collapse border border-black text-xs">
+                        <thead><tr className="bg-gray-100"><th className="border border-black px-2 py-1">No</th><th className="border border-black px-2 py-1 text-left">Jenis Luaran</th><th className="border border-black px-2 py-1 text-left">Status</th><th className="border border-black px-2 py-1">Tahun</th></tr></thead>
+                        <tbody>
+                          {(d.outputs ?? []).map((o, i) => (
+                            <tr key={i}><td className="border border-black px-2 py-1 text-center">{i + 1}</td><td className="border border-black px-2 py-1">{String(o.kind || "-")}</td><td className="border border-black px-2 py-1">{String(o.status || "-")}</td><td className="border border-black px-2 py-1 text-center">{String(o.year || "-")}</td></tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+
+                  {/* H. ANGGARAN BIAYA */}
+                  <div className="border-b border-black bg-[#8eaadb] px-2.5 py-1.5 font-bold uppercase">
+                    H. ANGGARAN BIAYA
+                  </div>
+                  <div className="border-b border-black bg-[#bdd0e9] px-2.5 py-1.5">
+                    Justifikasi anggaran biaya ditulis dengan terperinci dan jelas. Pada anggaran biaya tidak diperkenankan adanya honor pelaksana kegiatan.
+                  </div>
+                  <div className="border-b border-black bg-white px-2.5 py-2 space-y-2">
+                    <p><strong>Tabel.</strong> Rencana Anggaran Biaya Penelitian</p>
+                    <table className="w-full border-collapse border border-black text-xs">
+                      <thead>
+                        <tr>
+                          <th className="w-10 border border-black px-2 py-1 text-center">No</th>
+                          <th className="border border-black px-2 py-1 text-left">Jenis Pengeluaran</th>
+                          <th className="w-44 border border-black px-2 py-1 text-center">Biaya yang diusulkan (Rp)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(d.costs ?? []).length === 0 ? (
+                          <tr><td colSpan={3} className="border border-black px-2 py-1 text-center">–</td></tr>
+                        ) : (d.costs ?? []).map((c, i) => {
+                          const amount = costAmounts(c.quantity ?? "", c.price ?? "");
+                          return (
+                            <tr key={i}>
+                              <td className="border border-black px-2 py-1 text-center">{i + 1}</td>
+                              <td className="border border-black px-2 py-1">
+                                <strong>{String(c.category || "–")}</strong>: {String(c.item || "–")} ({String(c.quantity || "0")} {String(c.unit || "")})
+                                {c.reason && <span className="block text-[11px]">{String(c.reason)}</span>}
+                              </td>
+                              <td className="border border-black px-2 py-1 text-right">{amount.subtotal}</td>
+                            </tr>
+                          );
+                        })}
+                        <tr>
+                          <td colSpan={2} className="border border-black px-2 py-1 text-right font-bold">TOTAL</td>
+                          <td className="border border-black px-2 py-1 text-right font-bold">{money.format(BigInt(proposal.budget || "0"))}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* I. JADWAL PELAKSANAAN */}
+                  <div className="border-b border-black bg-[#8eaadb] px-2.5 py-1.5 font-bold">
+                    I. Jadwal Pelaksanaan
+                  </div>
+                  <div className="border-b border-black bg-[#bdd0e9] px-2.5 py-1.5">
+                    Jadwal kegiatan selama waktu durasi penelitian dituliskan dengan jelas sesuai pekerjaan, jadwal kegiatan jelas kaitannya dengan tahapan pekerjaan di metodologi
+                  </div>
+                  <div className="border-b border-black bg-white px-2.5 py-2 space-y-2">
+                    <p className="text-center font-bold uppercase">RENCANA JADWAL PELAKSANAAN KEGIATAN</p>
+                    {(() => {
+                      const maxMonth = Math.max(8, ...(d.schedule ?? []).map(s => Number(s.to) || 0));
+                      const months = Array.from({ length: maxMonth }, (_, i) => i + 1);
+                      return (
+                        <table className="w-full border-collapse border border-black text-xs">
+                          <thead>
+                            <tr>
+                              <th rowSpan={2} className="w-8 border border-black px-1.5 py-1 text-center">No</th>
+                              <th rowSpan={2} className="border border-black px-2 py-1 text-center">Nama Kegiatan</th>
+                              <th colSpan={months.length} className="border border-black px-2 py-1 text-center">Bulan</th>
+                            </tr>
+                            <tr>
+                              {months.map(m => (
+                                <th key={m} className="w-6 border border-black px-1 py-0.5 text-center">{m}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {!d.schedule?.length ? (
+                              <tr><td colSpan={2 + months.length} className="border border-black px-2 py-1 text-center">–</td></tr>
+                            ) : d.schedule.map((row, idx) => {
+                              const from = Number(row.from) || 0;
+                              const to = Number(row.to) || 0;
+                              return (
+                                <tr key={idx}>
+                                  <td className="border border-black px-1.5 py-1 text-center">{idx + 1}</td>
+                                  <td className="border border-black px-2 py-1">{row.name || "–"}</td>
+                                  {months.map(m => {
+                                    const active = from > 0 && to >= from && m >= from && m <= to;
+                                    return (
+                                      <td key={m} className={`border border-black px-1 py-1 text-center ${active ? "bg-slate-700 text-white font-bold" : ""}`}>
+                                        {active ? "✓" : ""}
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      );
+                    })()}
+                  </div>
+
+                  {/* J. DAFTAR PUSTAKA */}
+                  <div className="border-b border-black bg-[#8eaadb] px-2.5 py-1.5 font-bold">
+                    J. Daftar Pustaka
+                  </div>
+                  <div className="border-b border-black bg-[#bdd0e9] px-2.5 py-1.5">
+                    Daftar pustaka disusun dan ditulis berdasarkan <strong><em>APA style</em></strong> sesuai dengan urutan pengutipan. Hanya pustaka yang disitasi pada usulan penelitian yang dicantumkan dalam Daftar Pustaka.
+                  </div>
+                  <div className="bg-white px-2.5 py-2">
+                    {renderHtmlBlock(d.references)}
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>
