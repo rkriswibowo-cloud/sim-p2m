@@ -37,6 +37,10 @@ type proposal struct {
 	Scheme               string          `json:"scheme"`
 	Period               string          `json:"period"`
 	Owner                string          `json:"owner"`
+	OwnerNuptk           string          `json:"ownerNuptk"`
+	OwnerStudyProgram    string          `json:"ownerStudyProgram"`
+	OwnerFaculty         string          `json:"ownerFaculty"`
+	ProposalYear         int             `json:"proposalYear"`
 	UpdatedAt            time.Time       `json:"updatedAt"`
 	Data                 proposalData    `json:"data"`
 	RoadmapImage         bool            `json:"roadmapImage"`
@@ -162,6 +166,13 @@ func (s service) getProposal(c *gin.Context, a actor) {
 		return
 	}
 	item.Consents = consents
+	_ = s.db.QueryRowContext(c.Request.Context(), "SELECT proposal_year FROM grant_periods WHERE institution_id=? AND id=?", a.tenant, item.PeriodID).Scan(&item.ProposalYear)
+	_ = s.db.QueryRowContext(c.Request.Context(), `SELECT COALESCE(NULLIF(l.nuptk,''),l.code), COALESCE(sp.name,''), COALESCE(f.name,'')
+ FROM lecturers l
+ LEFT JOIN study_programs sp ON sp.institution_id=l.institution_id AND sp.id=l.parent_id
+ LEFT JOIN faculties f ON f.institution_id=sp.institution_id AND f.id=sp.parent_id
+ WHERE l.institution_id=? AND (l.user_id=? OR (l.user_id IS NULL AND l.email=?)) LIMIT 1`, a.tenant, a.ID, a.Email).
+		Scan(&item.OwnerNuptk, &item.OwnerStudyProgram, &item.OwnerFaculty)
 	if apps, err := loadApprovalsForProposal(c.Request.Context(), s.db, a.tenant, item.ID); err == nil {
 		item.Approvals = apps
 	}

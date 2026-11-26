@@ -21,6 +21,10 @@ type PrintableProposal = {
   scheme: string;
   period: string;
   owner: string;
+  ownerNuptk?: string;
+  ownerStudyProgram?: string;
+  ownerFaculty?: string;
+  proposalYear?: number;
   budget: string;
   fieldId: number | null;
   status: string;
@@ -177,17 +181,40 @@ export function PrintPreviewModal({
           ) : (
             <div className="space-y-5">
               {/* Cover */}
-              <div className="proposal-print-cover space-y-4 border-b border-slate-300 px-2 py-10 text-center print:border-0 print:pb-0">
-                <p className="text-xl font-bold uppercase">Proposal Penelitian</p>
-                <p className="text-sm font-bold uppercase">{proposal.scheme}</p>
-                <h1 className="wrap-anywhere py-6 text-xl font-bold">{proposal.title || "Draf Tanpa Judul"}</h1>
-                <div className="space-y-1 text-sm">
-                  <p className="font-semibold">Ketua: {proposal.owner}</p>
-                  {team.map((m, idx) => (
-                    <p key={idx}>Anggota {idx + 1}: {lookupLecturer(m.id)}</p>
-                  ))}
+              <div className="proposal-print-cover flex min-h-[240mm] flex-col justify-between border-b border-slate-300 px-2 py-4 text-center print:border-0 print:py-0">
+                <div className="flex items-center justify-center gap-6 pt-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/images/logo-uam.png" alt="Universitas Anwar Medika" className="h-20 w-auto object-contain sm:h-24" />
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/images/logo-diktisaintek.png" alt="Diktisaintek Berdampak" className="h-20 w-auto object-contain sm:h-24" />
                 </div>
-                <div className="pt-8"><p className="text-sm font-bold uppercase">{institutionName}</p><p className="mt-1 text-sm">{proposal.period}</p></div>
+
+                <div className="space-y-4 py-8">
+                  <p className="text-xl font-bold uppercase tracking-wide">PROPOSAL PENELITIAN</p>
+                  <h1 className="wrap-anywhere px-4 text-lg font-bold">{proposal.title || "[Judul Penelitian]"}</h1>
+                  <p className="text-sm font-bold">
+                    {proposal.ownerNuptk ? `${proposal.ownerNuptk} ` : ""}{proposal.owner}
+                  </p>
+                </div>
+
+                <div className="space-y-1 pb-6 text-sm font-bold">
+                  <p>{proposal.ownerStudyProgram || "[Program Studi]"}</p>
+                  <p>{proposal.ownerFaculty || "[Nama Fakultas]"}</p>
+                  <p>{institutionName || "Universitas Anwar Medika"}</p>
+                  <p>{proposal.proposalYear || new Date().getFullYear()}</p>
+                </div>
+
+                <div className="grid grid-cols-[44%_56%] overflow-hidden text-left">
+                  <div className="flex items-center bg-[#008000] px-5 py-4 text-white">
+                    <span className="font-serif text-xl font-bold tracking-tight sm:text-2xl">www.uam.ac.id</span>
+                  </div>
+                  <div className="bg-[#f5ee24] px-4 py-3 text-center text-[11px] leading-snug text-black">
+                    <p className="font-semibold uppercase">UNIVERSITAS ANWAR MEDIKA</p>
+                    <p>Jalan Raya By Pass Krian KM. 33 Balongbendo Sidoarjo 61263</p>
+                    <p>Telp. (031) 99892096 - 082233362014</p>
+                    <p>Email univ.anwarmedika@uam.ac.id</p>
+                  </div>
+                </div>
               </div>
 
               <section className="proposal-print-page-start space-y-3">

@@ -29,7 +29,9 @@ type docxMeta struct {
 	FiscalYear      int
 	OwnerEmail      string
 	OwnerCode       string
+	OwnerNuptk      string
 	OwnerUnit       string
+	OwnerFaculty    string
 	Lecturers       map[int64]personDetail
 	Students        map[int64]personDetail
 }
@@ -66,10 +68,11 @@ func (s service) loadProposalDocxMeta(ctx context.Context, a actor, id int64) (d
 		return meta, err
 	}
 
-	_ = s.db.QueryRowContext(ctx, `SELECT l.code, COALESCE(sp.name,'-')
+	_ = s.db.QueryRowContext(ctx, `SELECT l.code, COALESCE(NULLIF(l.nuptk,''),l.code), COALESCE(sp.name,'-'), COALESCE(f.name,'-')
  FROM lecturers l
  LEFT JOIN study_programs sp ON sp.institution_id=l.institution_id AND sp.id=l.parent_id
- WHERE l.institution_id=? AND l.email=? LIMIT 1`, a.tenant, meta.OwnerEmail).Scan(&meta.OwnerCode, &meta.OwnerUnit)
+ LEFT JOIN faculties f ON f.institution_id=sp.institution_id AND f.id=sp.parent_id
+ WHERE l.institution_id=? AND (l.user_id=? OR (l.user_id IS NULL AND l.email=?)) LIMIT 1`, a.tenant, a.ID, meta.OwnerEmail).Scan(&meta.OwnerCode, &meta.OwnerNuptk, &meta.OwnerUnit, &meta.OwnerFaculty)
 
 	if len(prop.Data.Team) > 0 {
 		lRows, err := s.db.QueryContext(ctx, `SELECT l.id, l.name, l.code, COALESCE(sp.name,'-')
@@ -375,26 +378,26 @@ func (s service) exportProposalDocx(c *gin.Context, a actor) {
 
 	var body strings.Builder
 	// Cover
-	body.WriteString(docxParagraph("", false, 22, "center", 1700))
-	body.WriteString(docxParagraph("PROPOSAL PENELITIAN", true, 34, "center", 160))
-	body.WriteString(docxParagraph(strings.ToUpper(p.Scheme), true, 26, "center", 480))
-	body.WriteString(docxParagraph(p.Title, true, 28, "center", 720))
-	body.WriteString(docxParagraph("TIM PENGUSUL", true, 22, "center", 160))
+	body.WriteString(docxParagraph("", false, 22, "center", 1200))
+	body.WriteString(docxParagraph("PROPOSAL PENELITIAN", true, 32, "center", 360))
+	body.WriteString(docxParagraph(p.Title, true, 26, "center", 360))
+	ownerCover := p.Owner
+	if meta.OwnerNuptk != "" {
+		ownerCover = meta.OwnerNuptk + " " + p.Owner
+	}
+	body.WriteString(docxParagraph(ownerCover, true, 22, "center", 1800))
+	if meta.OwnerUnit != "" && meta.OwnerUnit != "-" {
+		body.WriteString(docxParagraph(meta.OwnerUnit, true, 22, "center", 80))
+	}
+	if meta.OwnerFaculty != "" && meta.OwnerFaculty != "-" {
+		body.WriteString(docxParagraph(meta.OwnerFaculty, true, 22, "center", 80))
+	}
+	body.WriteString(docxParagraph(meta.InstitutionName, true, 22, "center", 80))
+	body.WriteString(docxParagraph(fmt.Sprintf("%d", meta.FiscalYear), true, 22, "center", 200))
 	ownerLabel := p.Owner
 	if meta.OwnerCode != "" {
 		ownerLabel += " (" + meta.OwnerCode + ")"
 	}
-	body.WriteString(docxParagraph("Ketua: "+ownerLabel, false, 22, "center", 100))
-	for _, m := range d.Team {
-		name := fmt.Sprintf("Dosen #%d", m.ID)
-		if info, ok := meta.Lecturers[m.ID]; ok {
-			name = info.Name + " (" + info.Code + ")"
-		}
-		body.WriteString(docxParagraph("Anggota: "+name, false, 22, "center", 80))
-	}
-	body.WriteString(docxParagraph("", false, 22, "center", 720))
-	body.WriteString(docxParagraph(strings.ToUpper(meta.InstitutionName), true, 24, "center", 100))
-	body.WriteString(docxParagraph(fmt.Sprintf("TAHUN %d", meta.FiscalYear), true, 24, "center", 200))
 
 	body.WriteString(docxHeading("HALAMAN PENGESAHAN", "center", true))
 	approvalRows := [][]string{{"Judul Penelitian", p.Title}, {"Ketua Peneliti", ownerLabel}, {"Program Studi", meta.OwnerUnit}}

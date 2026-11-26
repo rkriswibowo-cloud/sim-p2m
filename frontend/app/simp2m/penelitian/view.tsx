@@ -27,7 +27,9 @@ type ApprovalEntry = { id: number; fromStatus: string; toStatus: string; actorNa
 type PublicReview = { id: number; totalScore: number; recommendation: string; publicComment: string; submittedAt: string };
 type Proposal = {
   id: number; grantVersionId: number; fieldId: number | null; title: string; status: "draft" | "submitted";
-  revision: number; budget: string; scheme: string; period: string; owner: string; updatedAt: string; data: ProposalData;
+  revision: number; budget: string; scheme: string; period: string; owner: string;
+  ownerNuptk?: string; ownerStudyProgram?: string; ownerFaculty?: string; proposalYear?: number;
+  updatedAt: string; data: ProposalData;
   roadmapImage: boolean; methodImage: boolean; studentLetterFile?: boolean;
   periodId: number; schemeId: number; grantVersion: number; requiresVerification: boolean;
   verification: "none" | "requested" | "verified";

@@ -35,7 +35,15 @@
     break-before: page;
     margin-block-start: 0;
   }
-  .proposal-print-document .proposal-print-cover { padding-block-start: 35mm; }
+  .proposal-print-document .proposal-print-cover {
+    min-height: 245mm;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
   .proposal-print-document h1, .proposal-print-document h2, .proposal-print-document h3 { break-after: avoid; }
   .proposal-print-document tr, .proposal-print-document figure, .proposal-print-signatures { break-inside: avoid; }
   .proposal-print-document thead { display: table-header-group; }
