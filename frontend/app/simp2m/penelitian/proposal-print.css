@@ -3,6 +3,21 @@
   margin: 30mm 30mm 30mm 40mm;
 }
 
+.proposal-print-document .border-black {
+  border-color: #000000 !important;
+}
+
+.proposal-print-document table.border-black,
+.proposal-print-document table.border-black th,
+.proposal-print-document table.border-black td {
+  border-width: 1.5px;
+  border-color: #000000 !important;
+}
+
+.proposal-print-document .border-b.border-black {
+  border-bottom-width: 1.5px;
+}
+
 @media print {
   body:has(> .proposal-print-overlay) > :not(.proposal-print-overlay) {
     display: none !important;

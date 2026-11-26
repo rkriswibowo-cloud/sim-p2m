@@ -187,7 +187,7 @@ func docxTable(headers []string, rows [][]string, colWidths []int) string {
 	var b strings.Builder
 	b.WriteString(`<w:tbl><w:tblPr><w:tblW w:w="9000" w:type="dxa"/><w:tblBorders>`)
 	for _, side := range []string{"top", "left", "bottom", "right", "insideH", "insideV"} {
-		b.WriteString(fmt.Sprintf(`<w:%s w:val="single" w:sz="4" w:space="0" w:color="333333"/>`, side))
+		b.WriteString(fmt.Sprintf(`<w:%s w:val="single" w:sz="8" w:space="0" w:color="000000"/>`, side))
 	}
 	b.WriteString(`</w:tblBorders></w:tblPr><w:tblGrid>`)
 	for _, width := range colWidths {
@@ -227,7 +227,7 @@ func docxBoxedSection(title, guide, contentXML string) string {
 	var b strings.Builder
 	b.WriteString(`<w:tbl><w:tblPr><w:tblW w:w="9000" w:type="dxa"/><w:tblBorders>`)
 	for _, side := range []string{"top", "left", "bottom", "right", "insideH", "insideV"} {
-		b.WriteString(fmt.Sprintf(`<w:%s w:val="single" w:sz="6" w:space="0" w:color="000000"/>`, side))
+		b.WriteString(fmt.Sprintf(`<w:%s w:val="single" w:sz="8" w:space="0" w:color="000000"/>`, side))
 	}
 	b.WriteString(`</w:tblBorders></w:tblPr><w:tblGrid><w:gridCol w:w="9000"/></w:tblGrid>`)
 	b.WriteString(`<w:tr><w:trPr><w:cantSplit/></w:trPr><w:tc><w:tcPr><w:tcW w:w="9000" w:type="dxa"/><w:shd w:val="clear" w:color="auto" w:fill="8EAADB"/><w:tcMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tcMar></w:tcPr>`)
