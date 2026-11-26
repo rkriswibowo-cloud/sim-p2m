@@ -477,7 +477,7 @@ export function PrintPreviewModal({
                   </div>
                 </div>
 
-                <div className="border-[1.5px] border-black text-xs">
+                <div className="proposal-boxed-container border border-black text-xs">
                   {/* A. PETA JALAN */}
                   <div className="border-b border-black bg-[#8eaadb] px-2.5 py-1.5 font-bold uppercase">
                     A. PETA JALAN PENELITIAN (<em>ROAD MAP</em>)

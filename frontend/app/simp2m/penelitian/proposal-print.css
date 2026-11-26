@@ -14,6 +14,12 @@
   border-color: #000000 !important;
 }
 
+.proposal-print-document .proposal-boxed-container {
+  border: 1.5px solid #000000 !important;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
 .proposal-print-document .border-b.border-black {
   border-bottom-width: 1.5px;
 }
