@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Download, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Download, Eye, Pencil, Plus, Save, Trash2, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { toast } from "sonner";
@@ -81,7 +81,7 @@ export function ResearchJournal({ institutions }: { institutions: Institution[] 
           <td>{index + 1}</td><td>{item.scheme}</td><td>{item.year}</td>
           <td><p className="font-medium">{item.title}</p><p className="text-xs text-muted-foreground">Dana disetujui · {item.budget === null ? "Belum ditetapkan" : money.format(BigInt(item.budget))}</p></td>
           <td className="text-xs"><p>{item.count} catatan</p><p>Capaian {item.progress === null ? "–" : `${item.progress}%`}</p></td>
-          <td><Button size="sm" variant="outline" onClick={() => setProject(item)}>Buka catatan</Button></td>
+          <td><Button data-action-tone="info" size="sm" variant="outline" onClick={() => setProject(item)}><Eye size={15} aria-hidden="true" /> Buka catatan</Button></td>
         </tr>)}</tbody>
       </table></div>}
     </CardContent>
@@ -146,7 +146,7 @@ function JournalDetail({ project, categories, endpoint, onBack }: { project: Pro
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="outline" disabled={pending || !!editor} onClick={onBack}><ArrowLeft size={15} aria-hidden="true" /> Kembali</Button>
-          {project.writable && <Button size="sm" disabled={pending || !!editor || !entries} onClick={() => edit(empty)}><Plus size={15} aria-hidden="true" /> Tambah catatan</Button>}
+          {project.writable && <Button data-action-tone="positive" size="sm" disabled={pending || !!editor || !entries} onClick={() => edit(empty)}><Plus size={15} aria-hidden="true" /> Tambah catatan</Button>}
         </div>
         <Field id="journal-month" label="Bulan kegiatan">
           <select id="journal-month" className={fieldClass} value={month} onChange={event => setMonth(event.target.value)}>
@@ -189,7 +189,7 @@ function JournalDetail({ project, categories, endpoint, onBack }: { project: Pro
             <h4 className="text-sm font-semibold">Berkas bukti biaya</h4>
             <p className="text-xs text-muted-foreground">Unggah kuitansi, tiket, atau invoice. Maksimal 3 PDF, JPG, atau PNG, masing-masing 2 MB.</p>
             {!!editor.evidenceCount && <EvidenceLinks endpoint={endpoint} entry={editor} />}
-            <Input label="Tambah berkas bukti" type="file" accept="application/pdf,image/jpeg,image/png" multiple disabled={editor.evidenceCount + files.length >= 3}
+            <Input icon={<Upload size={15} aria-hidden="true" />} label="Tambah berkas bukti" type="file" accept="application/pdf,image/jpeg,image/png" multiple disabled={editor.evidenceCount + files.length >= 3}
               onChange={event => {
                 const selected = Array.from(event.target.files ?? []);
                 event.target.value = "";
@@ -200,13 +200,13 @@ function JournalDetail({ project, categories, endpoint, onBack }: { project: Pro
               }} />
             {files.map((file, index) => <div key={index} className="flex items-center justify-between gap-2 text-xs">
               <span className="wrap-anywhere">{file.name}</span>
-              <Button type="button" size="icon-sm" variant="ghost" aria-label={`Lepas ${file.name}`} onClick={() => setFiles(previous => previous.filter((_, i) => i !== index))}><Trash2 size={15} /></Button>
+              <Button data-action-tone="danger" type="button" size="icon-sm" variant="ghost" aria-label={`Lepas ${file.name}`} onClick={() => setFiles(previous => previous.filter((_, i) => i !== index))}><Trash2 size={15} aria-hidden="true" /></Button>
             </div>)}
           </div>
         </fieldset>
         <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-3">
           <Button type="button" variant="outline" disabled={pending} onClick={() => dialog.current?.close()}>Batal</Button>
-          <Button type="submit" disabled={pending}>{pending ? "Menyimpan…" : "Simpan catatan"}</Button>
+          <Button data-action-tone="positive" type="submit" disabled={pending}><Save size={15} aria-hidden="true" /> {pending ? "Menyimpan…" : "Simpan catatan"}</Button>
         </div>
       </form></dialog>}
       {!entries && !error && <p role="status">Memuat catatan…</p>}
@@ -219,8 +219,8 @@ function JournalDetail({ project, categories, endpoint, onBack }: { project: Pro
           <td>{entry.progress === null ? "–" : `${entry.progress}%`}</td><td>{entry.evidenceCount}<EvidenceLinks endpoint={endpoint} entry={entry} /></td>
           <td>{entry.fileNumber || "–"}</td><td>{entry.category || "–"}</td><td className="whitespace-nowrap">{money.format(BigInt(entry.amount))}</td>
           <td>{project.writable && <div className="flex gap-1">
-            <Button size="icon-sm" variant="outline" aria-label={`Ubah ${entry.activity}`} disabled={pending || !!editor} onClick={() => edit(entry)}><Pencil size={15} /></Button>
-            <Button size="icon-sm" variant="ghost" className="text-destructive" aria-label={`Hapus ${entry.activity}`} disabled={pending || !!editor} onClick={() => void change(entry, true)}><Trash2 size={15} /></Button>
+            <Button data-action-tone="edit" size="icon-sm" variant="outline" aria-label={`Ubah ${entry.activity}`} disabled={pending || !!editor} onClick={() => edit(entry)}><Pencil size={15} aria-hidden="true" /></Button>
+            <Button data-action-tone="danger" size="icon-sm" variant="ghost" className="text-destructive" aria-label={`Hapus ${entry.activity}`} disabled={pending || !!editor} onClick={() => void change(entry, true)}><Trash2 size={15} aria-hidden="true" /></Button>
           </div>}</td>
         </tr>)}</tbody>
       </table></div>}

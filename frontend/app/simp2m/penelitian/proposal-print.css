@@ -1,6 +1,6 @@
 @page simp2m-proposal {
   size: A4;
-  margin: 30mm 30mm 30mm 40mm;
+  margin: 30mm 20mm 30mm 40mm;
 }
 
 .proposal-print-document .border-black {
@@ -55,6 +55,7 @@
     page: simp2m-proposal;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+    overflow-wrap: anywhere;
   }
   .proposal-print-document .proposal-print-page-start {
     break-before: page;
@@ -72,6 +73,35 @@
     print-color-adjust: exact;
   }
   .proposal-print-document h1, .proposal-print-document h2, .proposal-print-document h3 { break-after: avoid; }
+  .proposal-print-document table {
+    width: 100%;
+    table-layout: fixed;
+  }
+
+  /* Cell borders travel with each row when a table spans multiple pages. */
+  .proposal-print-document table.border-black {
+    border: 0;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  .proposal-print-document table.border-black :is(th, td) {
+    border-width: 0 1.5px 1.5px 0;
+  }
+
+  .proposal-print-document table.border-black :is(thead, tbody:first-child) > tr:first-child > :is(th, td) {
+    border-top-width: 1.5px;
+  }
+
+  .proposal-print-document table.border-black thead > tr:first-child > :first-child,
+  .proposal-print-document table.border-black tbody > tr > :first-child {
+    border-left-width: 1.5px;
+  }
+
+  .proposal-print-document .proposal-schedule-month {
+    padding-inline: 0;
+  }
+
   .proposal-print-document tr, .proposal-print-document figure, .proposal-print-signatures { break-inside: avoid; }
   .proposal-print-document thead { display: table-header-group; }
   .proposal-print-document p { orphans: 3; widows: 3; }

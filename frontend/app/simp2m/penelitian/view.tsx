@@ -1,5 +1,6 @@
 "use client";
 
+import { CircleCheck, CircleX, Eye, History, Plus, RefreshCw, Save, Send, Trash2, Upload, UserCheck } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -317,7 +318,7 @@ export function ResearchPanel() {
               })}
             </div>
             {ineligibleVersions.length > 0 && <details className="pt-1 text-xs text-muted-foreground">
-              <summary className="cursor-pointer font-medium">Lihat {ineligibleVersions.length} skema lain yang belum memenuhi syarat</summary>
+              <summary className="cursor-pointer font-medium"><Eye size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" /> Lihat {ineligibleVersions.length} skema lain yang belum memenuhi syarat</summary>
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
                 {ineligibleVersions.map(item => {
                   const check = eligibilityMap[item.id];
@@ -341,11 +342,11 @@ export function ResearchPanel() {
               </div>
             </details>}
           </div>}
-          <Button size="sm" disabled={!selectedGrant || pending} onClick={() => void run(async () => {
+          <Button data-action-tone="positive" size="sm" disabled={!selectedGrant || pending} onClick={() => void run(async () => {
             const response = await api<{ id: number }>(endpoint, json("POST", { grantVersionId: grant }));
             show(await api<Proposal>(`${endpoint}/${response.id}`));
             setRevision(previous => previous + 1);
-          })}>Buat draf</Button>
+          })}><Plus size={15} aria-hidden="true" /> Buat draf</Button>
         </CardContent>
       </Card>}
 
@@ -379,11 +380,11 @@ export function ResearchPanel() {
           </div>}
           {writable && currentGrant && currentGrant.id !== proposal.grantVersionId && <div className="rounded-md border border-border p-2 text-sm">
             <p>Versi skema {currentGrant.version} tersedia. Tinjau aturan terbaru sebelum mengirim draf.</p>
-            <Button size="sm" variant="outline" className="mt-2" disabled={scopeLocked} onClick={() => void run(async () => {
+            <Button data-action-tone="attention" size="sm" variant="outline" className="mt-2" disabled={scopeLocked} onClick={() => void run(async () => {
               await api(`${endpoint}/${proposal.id}/grant`, json("POST", { revision: proposal.revision }));
               setProposal(await api<Proposal>(`${endpoint}/${proposal.id}`));
               toast.success("Draf memakai versi skema terbaru.", workspaceToastOptions);
-            })}>Gunakan versi skema terbaru</Button>
+            })}><RefreshCw size={15} aria-hidden="true" /> Gunakan versi skema terbaru</Button>
           </div>}
           <nav aria-label="Bagian usulan" className="flex flex-wrap gap-1.5">
             {steps.map((label, index) => <Button key={label} size="sm" type="button" variant={step === index ? "default" : "outline"}
@@ -398,20 +399,18 @@ export function ResearchPanel() {
                 <p className="text-xs text-muted-foreground">Penelitian yang melibatkan mahasiswa wajib menyertakan surat pernyataan bertanda tangan (PDF/JPG/PNG, maks. 5 MB).</p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <a href={`${endpoint}/${proposal.id}/export/student-letter-docx`} className="inline-flex items-center rounded-md border border-input bg-background px-2.5 py-1 text-xs font-medium hover:bg-accent">
-                  Unduh Template (.docx)
-                </a>
-                <Button size="sm" type="button" variant="outline" onClick={() => setPrintMode("student-letter")}>
+                <Button data-action-tone="info" size="sm" type="button" variant="outline" onClick={() => setPrintMode("student-letter")}>
+                  <Eye size={15} aria-hidden="true" />
                   Pratinjau / Cetak Surat
                 </Button>
               </div>
             </div>
             {proposal.studentLetterFile && (
               <p className="text-xs text-emerald-600 dark:text-emerald-400">
-                Berkas terunggah · <a target="_blank" rel="noopener" className="underline" href={`${endpoint}/${proposal.id}/images/student_letter`}>Lihat Surat Keterlibatan Mahasiswa</a>
+                Berkas terunggah · <a target="_blank" rel="noopener" className="underline" href={`${endpoint}/${proposal.id}/images/student_letter`}><Eye size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" /> Lihat Surat Keterlibatan Mahasiswa</a>
               </p>
             )}
-            {writable && <label className="block text-xs">Unggah Surat Keterlibatan Mahasiswa
+            {writable && <label className="block text-xs"><Upload size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" /> Unggah Surat Keterlibatan Mahasiswa
               <input className="mt-1 block max-w-full" type="file" accept="application/pdf,image/png,image/jpeg" disabled={scopeLocked} onChange={event => { upload("student_letter", event.target.files?.[0]); event.target.value = ""; }} />
             </label>}
             {dirty && <p className="text-xs text-muted-foreground">Tunggu draf tersimpan sebelum mengunggah surat.</p>}
@@ -421,8 +420,8 @@ export function ResearchPanel() {
             const hasImage = step === 2 ? proposal.roadmapImage : proposal.methodImage;
             const label = step === 2 ? "Gambar roadmap" : "Diagram metode";
             return <div className="space-y-2 rounded-md border border-border p-2">
-              {hasImage && <a target="_blank" rel="noopener" className="text-sm text-brand underline" href={`${endpoint}/${proposal.id}/images/${kind}`}>Lihat {label.toLowerCase()}</a>}
-              {writable && <label className="block">{label} (JPG/PNG, maks. 2 MB)
+              {hasImage && <a target="_blank" rel="noopener" className="text-sm text-brand underline" href={`${endpoint}/${proposal.id}/images/${kind}`}><Eye size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" /> Lihat {label.toLowerCase()}</a>}
+              {writable && <label className="block"><Upload size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" /> {label} (JPG/PNG, maks. 2 MB)
                 <input className="mt-1 block max-w-full" type="file" accept="image/png,image/jpeg" disabled={scopeLocked} onChange={event => { upload(kind, event.target.files?.[0]); event.target.value = ""; }} />
               </label>}
               {dirty && <p className="text-xs text-muted-foreground">Tunggu draf tersimpan sebelum mengunggah gambar.</p>}
@@ -436,7 +435,7 @@ export function ResearchPanel() {
               <div><dt className="text-muted-foreground">Jadwal</dt><dd>{draft.data.starts || "—"} sampai {draft.data.ends || "—"}</dd></div>
             </dl>
             <details className="rounded border border-border p-2">
-              <summary className="cursor-pointer font-medium">Tampilkan isi usulan</summary>
+              <summary className="cursor-pointer font-medium"><Eye size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" /> Tampilkan isi usulan</summary>
               <div className="mt-2 space-y-3">
                 {steps.slice(0, -1).map((label, index) => <section key={label} className="space-y-2 border-t border-border pt-2">
                   <h3 className="font-semibold">{label}</h3>
@@ -457,16 +456,12 @@ export function ResearchPanel() {
               </ul>
             </div>}
             <div className="flex flex-wrap gap-2 border-t border-border pt-2">
-              <a href={`${endpoint}/${proposal.id}/export/proposal-docx`} className="inline-flex items-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent">
-                Unduh Proposal (.docx)
-              </a>
-              <Button size="sm" type="button" variant="outline" onClick={() => setPrintMode("proposal")}>
+              <Button data-action-tone="info" size="sm" type="button" variant="outline" onClick={() => setPrintMode("proposal")}>
+                <Eye size={15} aria-hidden="true" />
                 Pratinjau / PDF Proposal
               </Button>
-              <a href={`${endpoint}/${proposal.id}/export/student-letter-docx`} className="inline-flex items-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent">
-                Unduh Surat Mahasiswa (.docx)
-              </a>
-              <Button size="sm" type="button" variant="outline" onClick={() => setPrintMode("student-letter")}>
+              <Button data-action-tone="info" size="sm" type="button" variant="outline" onClick={() => setPrintMode("student-letter")}>
+                <Eye size={15} aria-hidden="true" />
                 Pratinjau / PDF Surat Mahasiswa
               </Button>
             </div>
@@ -482,7 +477,7 @@ export function ResearchPanel() {
                 </div>)}
               </div>}
               {!!proposal.approvals?.length && <details className="pt-1">
-                <summary className="cursor-pointer font-medium">Riwayat status ({proposal.approvals.length})</summary>
+                <summary className="cursor-pointer font-medium"><History size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" /> Riwayat status ({proposal.approvals.length})</summary>
                 <ul className="mt-1 space-y-0.5">
                   {proposal.approvals.map(a => <li key={a.id}>{a.fromStatus} → {a.toStatus} ({a.actorName}){a.note ? ` — ${a.note}` : ""}</li>)}
                 </ul>
@@ -491,36 +486,36 @@ export function ResearchPanel() {
             {writable && <>
               <label className="flex items-start gap-2"><input type="checkbox" checked={confirmed} disabled={pending} onChange={event => setConfirmed(event.target.checked)} /> Saya sudah memeriksa isi usulan dan menyatakan data yang diajukan benar.</label>
               {isRevision ? (
-                <Button size="sm" disabled={scopeLocked || !confirmed} onClick={() => void run(async () => {
+                <Button data-action-tone="positive" size="sm" disabled={scopeLocked || !confirmed} onClick={() => void run(async () => {
                   await api(`${endpoint}/${proposal.id}/resubmit`, json("POST", { revision: proposal.revision, confirmed: true }));
                   const refreshed = await api<Proposal>(`${endpoint}/${proposal.id}`);
                   setProposal(refreshed); setRevision(previous => previous + 1);
                   toast.success("Revisi usulan berhasil dikirim ulang.", workspaceToastOptions);
-                })}>Kirim ulang revisi</Button>
+                })}><Send size={15} aria-hidden="true" /> Kirim ulang revisi</Button>
               ) : (
-                <Button size="sm" disabled={scopeLocked || !confirmed} onClick={() => void run(async () => {
+                <Button data-action-tone="positive" size="sm" disabled={scopeLocked || !confirmed} onClick={() => void run(async () => {
                   await api(`${endpoint}/${proposal.id}/submit`, json("POST", { revision: proposal.revision, confirmed: true }));
                   const refreshed = await api<Proposal>(`${endpoint}/${proposal.id}`);
                   setProposal(refreshed); setRevision(previous => previous + 1);
                   toast.success("Usulan berhasil dikirim.", workspaceToastOptions);
-                })}>Kirim usulan</Button>
+                })}><Send size={15} aria-hidden="true" /> Kirim usulan</Button>
               )}
             </>}
           </div>}
           {writable && <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-2">
             <p role="status" className="text-xs text-muted-foreground">{pending ? "Memproses…" : dirty ? "Perubahan belum tersimpan" : "Draf tersimpan otomatis"}</p>
             <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="outline" disabled={!dirty || pending} onClick={() => void save(true)}>Simpan draf</Button>
-              {autoFailed && <Button size="sm" variant="outline" disabled={pending} onClick={() => void run(async () => {
+              <Button data-action-tone="positive" size="sm" variant="outline" disabled={!dirty || pending} onClick={() => void save(true)}><Save size={15} aria-hidden="true" /> Simpan draf</Button>
+              {autoFailed && <Button data-action-tone="attention" size="sm" variant="outline" disabled={pending} onClick={() => void run(async () => {
                 if (!await confirmRemoval("Buang perubahan lokal?", "Draf akan dimuat ulang dari database.")) return;
                 show(await api<Proposal>(`${endpoint}/${proposal.id}`));
-              })}>Muat ulang draf</Button>}
-              <Button size="sm" variant="ghost" className="text-destructive" disabled={scopeLocked} onClick={() => void run(async () => {
+              })}><RefreshCw size={15} aria-hidden="true" /> Muat ulang draf</Button>}
+              <Button data-action-tone="danger" size="sm" variant="ghost" className="text-destructive" disabled={scopeLocked} onClick={() => void run(async () => {
                 if (!await confirmRemoval("Batalkan draf usulan?", "Draf akan dibatalkan dan dikeluarkan dari daftar usulan.")) return;
                 await api(`${endpoint}/${proposal.id}`, json("DELETE", { revision: proposal.revision }));
                 setProposal(undefined); setRevision(previous => previous + 1);
                 toast.success("Draf usulan dibatalkan.", workspaceToastOptions);
-              })}>Batalkan draf</Button>
+              })}><Trash2 size={15} aria-hidden="true" /> Batalkan draf</Button>
             </div>
           </div>}
         </CardContent>
@@ -535,12 +530,12 @@ export function ResearchPanel() {
             {item.activeLecturer && <p>Periksa status dosen aktif.</p>}
             {item.requirement && <p className="whitespace-pre-wrap break-words">{item.requirement}</p>}
             {item.own && mode === "production" ? <p className="text-xs text-muted-foreground">Verifikasi dilakukan oleh pengelola lain.</p>
-              : <Button size="sm" variant="outline" disabled={pending || dirty} onClick={() => void run(async () => {
+              : <Button data-action-tone="positive" size="sm" variant="outline" disabled={pending || dirty} onClick={() => void run(async () => {
                 await api(`${endpoint}/verification/${item.id}`, json("POST", { revision: item.revision }));
                 if (proposal?.id === item.id) setProposal(await api<Proposal>(`${endpoint}/${item.id}`));
                 setRevision(previous => previous + 1);
                 toast.success("Syarat usulan diverifikasi.", workspaceToastOptions);
-              })}>Konfirmasi syarat sudah diperiksa</Button>}
+              })}><CircleCheck size={15} aria-hidden="true" /> Konfirmasi syarat sudah diperiksa</Button>}
           </article>)}
         </CardContent>
       </Card>}
@@ -560,27 +555,27 @@ export function ResearchPanel() {
               </span>
             </div>
             {mode !== "trial-reader" && inv.proposalStatus === "draft" && <div className="flex flex-wrap gap-2">
-              {inv.status !== "approved" && <Button size="sm" variant="outline" disabled={pending} onClick={() => void run(async () => {
+              {inv.status !== "approved" && <Button data-action-tone="positive" size="sm" variant="outline" disabled={pending} onClick={() => void run(async () => {
                 await api(`${endpoint}/${inv.proposalId}/consent`, json("POST", { status: "approved", note: "" }));
                 setRevision(previous => previous + 1);
                 toast.success("Keanggotaan tim disetujui.", workspaceToastOptions);
-              })}>Setuju menjadi anggota</Button>}
-              {inv.status !== "rejected" && <Button size="sm" variant="ghost" className="text-destructive" disabled={pending} onClick={() => void run(async () => {
+              })}><UserCheck size={15} aria-hidden="true" /> Setuju menjadi anggota</Button>}
+              {inv.status !== "rejected" && <Button data-action-tone="danger" size="sm" variant="ghost" className="text-destructive" disabled={pending} onClick={() => void run(async () => {
                 const note = window.prompt("Alasan penolakan (opsional):") ?? "";
                 await api(`${endpoint}/${inv.proposalId}/consent`, json("POST", { status: "rejected", note }));
                 setRevision(previous => previous + 1);
                 toast.success("Undangan keanggotaan ditolak.", workspaceToastOptions);
-              })}>Tolak</Button>}
+              })}><CircleX size={15} aria-hidden="true" /> Tolak</Button>}
             </div>}
           </article>)}
         </CardContent>
       </Card>}
 
-      <Card className="workspace-panel rounded-md">
-        <CardHeader><CardTitle>Usulan saya</CardTitle></CardHeader>
+      <Card className="workspace-panel research-proposal-list rounded-md">
+        <CardHeader className="research-proposal-list-heading"><CardTitle>Usulan saya</CardTitle></CardHeader>
         <CardContent className="space-y-2">
           {items?.length === 0 && <p className="text-sm text-muted-foreground">Belum ada usulan penelitian.</p>}
-          {items?.map(item => <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-2">
+          {items?.map(item => <div key={item.id} className="research-proposal-list-item flex flex-wrap items-center justify-between gap-2 rounded-md border p-2">
             <div className="min-w-0"><p className="break-words text-sm font-medium">{item.title || "Draf tanpa judul"}</p>
               <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 <span>{item.scheme} · {item.period}</span>
@@ -591,15 +586,15 @@ export function ResearchPanel() {
             </div>
             <div className="flex flex-wrap gap-2">
               {item.status === "draft" && mode !== "trial-reader" && (
-                <Button size="sm" variant="ghost" className="text-destructive" disabled={scopeLocked} onClick={() => void run(async () => {
+                <Button data-action-tone="danger" size="sm" variant="ghost" className="text-destructive" disabled={scopeLocked} onClick={() => void run(async () => {
                   if (!await confirmRemoval("Batalkan draf usulan?", "Draf usulan ini akan dibatalkan dan dikeluarkan dari daftar.")) return;
                   await api(`${endpoint}/${item.id}`, json("DELETE", { revision: item.revision }));
                   if (proposal?.id === item.id) setProposal(undefined);
                   setRevision(previous => previous + 1);
                   toast.success("Draf usulan dibatalkan.", workspaceToastOptions);
-                })}>Batalkan</Button>
+                })}><Trash2 size={15} aria-hidden="true" /> Batalkan</Button>
               )}
-              <Button size="sm" variant="outline" disabled={scopeLocked} onClick={() => void run(async () => show(await api<Proposal>(`${endpoint}/${item.id}`)))}>Buka</Button>
+              <Button data-action-tone="info" size="sm" variant="outline" disabled={scopeLocked} onClick={() => void run(async () => show(await api<Proposal>(`${endpoint}/${item.id}`)))}><Eye size={15} aria-hidden="true" /> Buka</Button>
             </div>
           </div>)}
         </CardContent>

@@ -5,6 +5,7 @@ import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { Toaster } from "sonner";
 import { workspaceToastOptions } from "./confirm-removal";
 import { LogoutButton } from "./logout-button";
@@ -114,7 +115,7 @@ function Navigation({ system, canAccess, canAudit, canMaster, canGrant, canResea
 }
 
 export function WorkspaceShell(props: ShellProps) {
-  const { theme, appearance, collapsed, save } = useWorkspacePreferences();
+  const { theme, appearance, collapsed, iconColor, save } = useWorkspacePreferences();
   const [isMobileOpen, setMobileOpen] = useState(false);
   const drawer = useRef<HTMLDialogElement>(null);
   const mobileTrigger = useRef<HTMLButtonElement>(null);
@@ -131,7 +132,8 @@ export function WorkspaceShell(props: ShellProps) {
   function openDrawer() { drawer.current?.showModal(); setMobileOpen(true); }
 
   return (
-    <div lang="id" className="workspace-shell" data-mode={appearance} data-collapsed={collapsed}>
+    <div lang="id" className="workspace-shell" data-mode={appearance} data-collapsed={collapsed}
+      style={iconColor ? { "--workspace-custom-icon": iconColor } as CSSProperties : undefined}>
       <a className="workspace-skip" href="#workspace-main">Lewati ke konten</a>
       <header className="workspace-topbar">
         <button ref={mobileTrigger} type="button" className="workspace-icon workspace-mobile-toggle" aria-label="Buka navigasi" aria-controls="workspace-drawer" aria-expanded={isMobileOpen} onClick={openDrawer}><Menu size={20} /></button>

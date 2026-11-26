@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Download } from "lucide-react";
+import { Download, Eye, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { workspaceToastOptions } from "../confirm-removal";
@@ -86,8 +86,8 @@ export function FinalAttachments({ endpoint, poster, disabled, onUpload }: {
     </section>
     <section className="space-y-2 rounded-lg border border-border p-3" aria-labelledby="poster-heading">
       <h3 id="poster-heading" className="font-semibold">L.2 Poster Penelitian</h3>
-      {hasPoster && <a className="text-sm text-brand underline" href={posterURL} target="_blank" rel="noreferrer">Lihat poster tersimpan</a>}
-      <Input label={hasPoster ? "Ganti poster (JPG, maksimal 2 MB)" : "Unggah poster (JPG, maksimal 2 MB)"} type="file" accept="image/jpeg,.jpg,.jpeg"
+      {hasPoster && <a className="text-sm text-brand underline" href={posterURL} target="_blank" rel="noreferrer"><Eye size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" /> Lihat poster tersimpan</a>}
+      <Input icon={<Upload size={15} aria-hidden="true" />} label={hasPoster ? "Ganti poster (JPG, maksimal 2 MB)" : "Unggah poster (JPG, maksimal 2 MB)"} type="file" accept="image/jpeg,.jpg,.jpeg"
         disabled={disabled || uploading} onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void upload(file); }} />
       {uploading && <p role="status" className="text-sm">Mengunggah poster…</p>}
       {posterError && <p role="alert" className="text-sm text-destructive">{posterError}</p>}

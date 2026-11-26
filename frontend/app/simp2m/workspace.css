@@ -12,6 +12,13 @@
   --brand: #a0dfc4;
   --ring: #a0dfc4;
   --destructive: #ff9a9a;
+  --action-positive: #76dfbe;
+  --action-positive-text: #092c22;
+  --action-info: #a3c9ec;
+  --action-edit: #c2adff;
+  --action-attention: #ffd180;
+  --research-proposal: #ffb568;
+  --research-proposal-text: #3b1c08;
   --workspace-top: #101010;
   --workspace-top-height: 3.25rem;
   color-scheme: dark;
@@ -31,6 +38,13 @@
   --brand: #126249;
   --ring: #126249;
   --destructive: #b42329;
+  --action-positive: #006952;
+  --action-positive-text: #fff;
+  --action-info: #28557c;
+  --action-edit: #5b35a7;
+  --action-attention: #804a08;
+  --research-proposal: #a1420b;
+  --research-proposal-text: #fff;
   --workspace-top: #ffffff;
   color-scheme: light;
 }
@@ -70,7 +84,16 @@
 .workspace-nav-section { border-top: 1px solid var(--border); margin-top: .45rem; padding-top: .25rem; }
 .workspace-nav-section .workspace-nav-caption { margin-top: .45rem; }
 .workspace-nav-link { display: flex; align-items: center; gap: .65rem; min-height: 2.05rem; padding: .35rem .55rem; border-radius: .35rem; color: var(--foreground); }
-.workspace-nav-link > svg { flex: none; color: var(--brand); }
+.workspace-nav-link > svg,
+.workspace-nav-group summary span > svg,
+.workspace-icon-preview > svg {
+  flex: none;
+  color: color-mix(in srgb, var(--workspace-custom-icon, var(--nav-icon-tone, var(--brand))) 46%, var(--foreground));
+}
+.workspace-nav-section[aria-label="Modul Inti"], .workspace-icon-preview { --nav-icon-tone: var(--action-info); }
+.workspace-nav-section[aria-label="Dokumen & Pelaporan"] { --nav-icon-tone: var(--action-edit); }
+.workspace-nav-section[aria-label="Master Data"] { --nav-icon-tone: var(--action-positive); }
+.workspace-nav-section[aria-label="Administrasi"] { --nav-icon-tone: var(--action-attention); }
 .workspace-nav-link:hover, .workspace-nav-link[aria-current="page"], .workspace-nav-group summary:hover { background: var(--accent); }
 .workspace-nav-link[aria-current="page"] { color: var(--brand); font-weight: 650; }
 .workspace-nav-group { margin-top: .2rem; }
@@ -84,6 +107,52 @@
 .workspace-body { display: flex; flex-direction: column; min-width: 0; min-height: calc(100dvh - var(--workspace-top-height)); padding: 1rem clamp(.75rem, 2vw, 1.5rem) .5rem; }
 .workspace-content { flex: 1; min-width: 0; }
 .workspace-content > * { min-width: 0; }
+.workspace-content [data-action-tone="positive"] {
+  --action-color: var(--action-positive);
+  --action-fill: var(--action-positive);
+  --action-hover: color-mix(in srgb, var(--action-positive) 88%, var(--card));
+  --action-text: var(--action-positive-text);
+}
+.workspace-content [data-action-tone="info"] { --action-color: var(--action-info); }
+.workspace-content [data-action-tone="edit"] { --action-color: var(--action-edit); }
+.workspace-content [data-action-tone="attention"] { --action-color: var(--action-attention); }
+.workspace-content [data-action-tone="danger"] { --action-color: var(--destructive); }
+.workspace-content [data-action-tone="research-proposal"] {
+  --action-color: var(--research-proposal);
+}
+.workspace-content [data-action-tone="research-proposal"][aria-current="page"] {
+  --action-fill: var(--research-proposal);
+  --action-hover: color-mix(in srgb, var(--research-proposal) 92%, var(--card));
+  --action-text: var(--research-proposal-text);
+}
+.workspace-content .research-proposal-list {
+  border-color: color-mix(in srgb, var(--research-proposal) 48%, var(--border));
+  background: color-mix(in srgb, var(--research-proposal) 5%, var(--card));
+}
+.research-proposal-list-heading {
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--research-proposal) 15%, var(--card));
+  color: var(--research-proposal);
+}
+.research-proposal-list-item {
+  border-color: color-mix(in srgb, var(--research-proposal) 28%, var(--border));
+  background: color-mix(in srgb, var(--research-proposal) 8%, var(--card));
+}
+.workspace-content [data-action-tone] {
+  border: 1px solid color-mix(in srgb, var(--action-color) 50%, var(--card));
+  background: var(--action-fill, color-mix(in srgb, var(--action-color) 13%, var(--card)));
+  color: var(--action-text, var(--action-color));
+  transition: background-color 150ms, border-color 150ms;
+}
+.workspace-content [data-action-tone]:hover:not(:disabled) {
+  border-color: var(--action-color);
+  background: var(--action-hover, color-mix(in srgb, var(--action-color) 21%, var(--card)));
+}
+.workspace-content [data-action-tone].underline {
+  border-radius: .3rem;
+  padding-inline: .25rem;
+}
+
 .workspace-footer { margin-top: 1rem; padding: .65rem .1rem; border-top: 1px solid var(--border); }
 .workspace-drawer { position: fixed; inset: 0 auto 0 0; margin: 0; width: min(21rem, 88vw); max-width: none; height: 100dvh; max-height: none; padding: 0; border: 1px solid var(--border); background: var(--card); color: var(--foreground); }
 .workspace-drawer::backdrop { background: #000a; }
@@ -170,7 +239,6 @@
 .workspace-panel > :last-child { padding: .65rem .8rem .8rem; }
 .workspace-shell .bg-primary { background: var(--brand); color: var(--background); }
 .workspace-shell .bg-primary:hover { background: color-mix(in srgb, var(--brand) 87%, var(--foreground)); }
-.workspace-nav-link[href$="section=institutions"] > svg { color: var(--nav-building, #a3c9ec); }
-.workspace-nav-link[href$="/akses"] > svg { color: var(--nav-users, #bfa7ff); }
-.workspace-nav-link[href$="section=audit"] > svg { color: var(--nav-audit, #ffd180); }
-.workspace-shell[data-mode="light"] { --nav-building: #28557c; --nav-users: #5b35a7; --nav-audit: #8b5108; }
+.workspace-nav-link[href$="section=institutions"] { --nav-icon-tone: var(--action-info); }
+.workspace-nav-link[href$="/akses"] { --nav-icon-tone: var(--action-edit); }
+.workspace-nav-link[href$="section=audit"] { --nav-icon-tone: var(--action-attention); }

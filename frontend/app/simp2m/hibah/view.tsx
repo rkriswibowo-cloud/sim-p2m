@@ -1,5 +1,6 @@
 "use client";
 
+import { Pencil, Plus, Save, SearchCheck, ToggleLeft, ToggleRight, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { formatGrantMonth, grantMonthBounds } from "../grant-schedule";
@@ -284,7 +285,7 @@ export function GrantPanel() {
           <h1 className="text-2xl font-semibold tracking-tight">Hibah</h1>
           {mode !== "production" && <p className="mt-1 text-sm text-brand">Mode trial · database terpisah</p>}
         </div>
-        {overview?.canManage && !create && <Button disabled={pending} onClick={() => {setEditingPeriod(undefined);setRevisionForm(undefined);setCreate(true);}}>Buat periode</Button>}
+        {overview?.canManage && !create && <Button data-action-tone="positive" disabled={pending} onClick={() => {setEditingPeriod(undefined);setRevisionForm(undefined);setCreate(true);}}><Plus size={15} aria-hidden="true" /> Buat periode</Button>}
       </header>
 
       <div role="group" aria-label="Jenis hibah" className="grid gap-1 rounded-lg border border-border bg-card p-1 sm:grid-cols-2">
@@ -355,7 +356,7 @@ export function GrantPanel() {
             <label className="flex items-center gap-2"><input type="checkbox" name="allowDailyJournal" defaultChecked={editingPeriod?.allowDailyJournal} /> Aktifkan Catatan Harian</label>
             {program === "research" && <label className="flex items-center gap-2"><input type="checkbox" name="allowProgressReport" defaultChecked={editingPeriod?.allowProgressReport} /> Aktifkan Laporan Kemajuan</label>}
             <label className="flex items-center gap-2"><input type="checkbox" name="allowFinalReport" defaultChecked={editingPeriod?.allowFinalReport} /> Aktifkan Laporan Akhir</label>
-            <div className="workspace-form-actions"><Button type="button" variant="outline" disabled={pending} onClick={() => setCreate(false)}>Batal</Button><Button disabled={pending}>Simpan periode</Button></div>
+            <div className="workspace-form-actions"><Button type="button" variant="outline" disabled={pending} onClick={() => setCreate(false)}>Batal</Button><Button data-action-tone="positive" disabled={pending}><Save size={15} aria-hidden="true" /> Simpan periode</Button></div>
           </form>
         </CardContent>
       </Card>}
@@ -386,8 +387,8 @@ export function GrantPanel() {
             </p>
           )}
           <div className="flex flex-wrap gap-2">
-            {overview?.canManage && !create && <Button size="sm" variant="outline" disabled={pending} onClick={() => {setRevisionForm(undefined);setEditingPeriod(selected);setCreate(true);}}>Edit periode</Button>}
-            {overview?.canManage && selected.state !== "closed" && !revisionForm && <Button size="sm" variant="outline" disabled={pending} onClick={() => {setCreate(false);setRevisionForm({});}}>Tambah skema</Button>}
+            {overview?.canManage && !create && <Button data-action-tone="edit" size="sm" variant="outline" disabled={pending} onClick={() => {setRevisionForm(undefined);setEditingPeriod(selected);setCreate(true);}}><Pencil size={15} aria-hidden="true" /> Edit periode</Button>}
+            {overview?.canManage && selected.state !== "closed" && !revisionForm && <Button data-action-tone="positive" size="sm" variant="outline" disabled={pending} onClick={() => {setCreate(false);setRevisionForm({});}}><Plus size={15} aria-hidden="true" /> Tambah skema</Button>}
           </div>
           {overview?.canManage && (
             <div className="mt-2 rounded-md border border-border bg-background p-2.5">
@@ -402,7 +403,7 @@ export function GrantPanel() {
                 ).filter(([key]) => program === "research" || key !== "allowProgressReport").map(([key, label]) => {
                   const active = Boolean(selected[key]);
                   return (
-                    <Button
+                    <Button data-action-tone="attention"
                       key={key}
                       type="button"
                       size="sm"
@@ -410,6 +411,7 @@ export function GrantPanel() {
                       disabled={pending}
                       onClick={() => void toggleReporting(selected, key)}
                     >
+                      {active ? <ToggleRight size={15} aria-hidden="true" /> : <ToggleLeft size={15} aria-hidden="true" />}
                       {label}: {active ? "Aktif" : "Nonaktif"}
                     </Button>
                   );
@@ -449,7 +451,7 @@ export function GrantPanel() {
               <textarea id="manual" name="manual" rows={3} maxLength={1000} defaultValue={previous?.manual} className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm" />
             </div>
             <div className="workspace-form-actions"><Button type="button" variant="outline" disabled={pending} onClick={() => setRevisionForm(undefined)}>Batal</Button>
-              <Button disabled={pending || !availableSchemes.length || !options.sources.length}>{previous ? "Simpan perubahan" : "Simpan skema"}</Button>
+              <Button data-action-tone="positive" disabled={pending || !availableSchemes.length || !options.sources.length}><Save size={15} aria-hidden="true" /> {previous ? "Simpan perubahan" : "Simpan skema"}</Button>
             </div>
           </form>
         </CardContent>
@@ -472,9 +474,9 @@ export function GrantPanel() {
             {getMinOutputInfo(item.scheme) && <p className="text-xs text-muted-foreground">Minimal luaran: {getMinOutputInfo(item.scheme)}.</p>}
             {item.manual && <p className="whitespace-pre-wrap break-words text-xs text-muted-foreground">{item.manual}</p>}
             <div className="flex flex-wrap gap-2">
-              {selected.state === "open" && <Button size="sm" variant="outline" disabled={pending} onClick={() => void check(item.id)}>Cek kelayakan saya</Button>}
-              {overview?.canManage && selected.state !== "closed" && <Button size="sm" variant="outline" disabled={pending} onClick={() => setRevisionForm({previous:item})}>Edit</Button>}
-              {overview?.canManage && selected.state !== "closed" && <Button size="sm" variant="ghost" className="text-destructive" disabled={pending} onClick={() => void removeScheme(item)}>Hapus</Button>}
+              {selected.state === "open" && <Button data-action-tone="info" size="sm" variant="outline" disabled={pending} onClick={() => void check(item.id)}><SearchCheck size={15} aria-hidden="true" /> Cek kelayakan saya</Button>}
+              {overview?.canManage && selected.state !== "closed" && <Button data-action-tone="edit" size="sm" variant="outline" disabled={pending} onClick={() => setRevisionForm({previous:item})}><Pencil size={15} aria-hidden="true" /> Edit</Button>}
+              {overview?.canManage && selected.state !== "closed" && <Button data-action-tone="danger" size="sm" variant="ghost" className="text-destructive" disabled={pending} onClick={() => void removeScheme(item)}><Trash2 size={15} aria-hidden="true" /> Hapus</Button>}
             </div>
             {answers[item.id] && <div className="rounded-md border border-border bg-background p-2 text-sm" role="status">
               <strong>{verdictLabels[answers[item.id].result]}</strong>

@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Eye, Pencil, Plus, Save, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { toast } from "sonner";
@@ -152,7 +152,7 @@ function Drafts({ endpoint }: { endpoint: string }) {
     <Card>
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
         <CardTitle>Draf usulan</CardTitle>
-        <Button type="button" size="sm" disabled={pending || !!draft || !items} onClick={() => setDraft(blank)}><Plus size={16} /> Tambah draf</Button>
+        <Button data-action-tone="positive" type="button" size="sm" disabled={pending || !!draft || !items} onClick={() => setDraft(blank)}><Plus size={16} aria-hidden="true" /> Tambah draf</Button>
       </CardHeader>
       <CardContent>
         {!items && !error && <p role="status" className="text-sm text-muted-foreground">Memuat draf…</p>}
@@ -165,8 +165,8 @@ function Drafts({ endpoint }: { endpoint: string }) {
               {item.data.budget && <p className="mt-1 text-xs text-muted-foreground">Estimasi {budgetFormat.format(BigInt(item.data.budget))}</p>}
             </div>
             <div className="flex gap-1">
-              <Button type="button" size="sm" variant="ghost" onClick={() => setDraft(item)} disabled={pending || !!draft}><Pencil size={15} /> Ubah</Button>
-              <Button type="button" size="sm" variant="ghost" className="text-destructive" onClick={() => void remove(item)} disabled={pending || !!draft}><Trash2 size={15} /> Hapus</Button>
+              <Button data-action-tone="edit" type="button" size="sm" variant="ghost" onClick={() => setDraft(item)} disabled={pending || !!draft}><Pencil size={15} aria-hidden="true" /> Ubah</Button>
+              <Button data-action-tone="danger" type="button" size="sm" variant="ghost" className="text-destructive" onClick={() => void remove(item)} disabled={pending || !!draft}><Trash2 size={15} aria-hidden="true" /> Hapus</Button>
             </div>
           </li>)}
         </ul>}
@@ -215,7 +215,7 @@ function Drafts({ endpoint }: { endpoint: string }) {
               onData={data => setDraft(previous => previous && { ...previous, data: { ...previous.data, members: data.team, students: data.students } })} />
           </>}
           {draft.data.team && <details className="text-xs text-muted-foreground">
-            <summary>Catatan tim dari draf lama</summary>
+            <summary><Eye size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" /> Catatan tim dari draf lama</summary>
             <p className="mt-1 whitespace-pre-wrap wrap-anywhere">{draft.data.team}</p>
           </details>}
         </fieldset>
@@ -237,10 +237,10 @@ function Drafts({ endpoint }: { endpoint: string }) {
               {([["solution", "Solusi"], ["output", "Target luaran"], ["indicator", "Indikator capaian"]] as const).map(([key, label]) => <Input
                 key={key} label={`${label} ${index + 1}`} required maxLength={300} value={row[key]}
                 onChange={event => update("targets", targets.map((item, i) => i === index ? { ...item, [key]: event.target.value } : item))} />)}
-              <Button type="button" variant="ghost" className="text-destructive" aria-label={`Hapus target ${index + 1}`}
+              <Button data-action-tone="danger" type="button" variant="ghost" className="text-destructive" aria-label={`Hapus target ${index + 1}`}
                 onClick={() => update("targets", targets.filter((_, i) => i !== index))}><Trash2 size={16} aria-hidden="true" /></Button>
             </div>)}
-            <Button type="button" size="sm" variant="outline" disabled={targets.length >= 30}
+            <Button data-action-tone="positive" type="button" size="sm" variant="outline" disabled={targets.length >= 30}
               onClick={() => update("targets", [...targets, { solution: "", output: "", indicator: "" }])}><Plus size={16} aria-hidden="true" /> Tambah target</Button>
           </div>
           {narrative("plan", "C. Metode pelaksanaan", "Jelaskan tahapan, partisipasi mitra, peran tim, evaluasi, dan keberlanjutan.", 1500)}
@@ -269,12 +269,12 @@ function Drafts({ endpoint }: { endpoint: string }) {
             <Input label="Jumlah" type="number" required min={1} max={100000} value={row.quantity || ""}
               onChange={event => update("costs", costs.map((item, i) => i === index ? { ...item, quantity: Number(event.target.value) } : item))} />
             <div className="flex min-w-0 items-end justify-between gap-1 text-sm"><span className="min-w-0"><span className="block text-xs text-muted-foreground">Subtotal</span><span className="wrap-anywhere tabular-nums">{budgetFormat.format(costTotal(row))}</span></span>
-              <Button type="button" size="icon-sm" variant="ghost" className="shrink-0 text-destructive" aria-label={`Hapus baris RAB ${index + 1}`}
+              <Button data-action-tone="danger" type="button" size="icon-sm" variant="ghost" className="shrink-0 text-destructive" aria-label={`Hapus baris RAB ${index + 1}`}
                 onClick={() => update("costs", costs.filter((_, i) => i !== index))}><Trash2 size={16} aria-hidden="true" /></Button>
             </div>
           </div>)}
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <Button type="button" size="sm" variant="outline" disabled={costs.length >= 40}
+            <Button data-action-tone="positive" type="button" size="sm" variant="outline" disabled={costs.length >= 40}
               onClick={() => update("costs", [...costs, { category: "", item: "", reason: "", quantity: 1, price: "" }])}><Plus size={16} aria-hidden="true" /> Tambah rincian RAB</Button>
             <strong className="text-sm tabular-nums">Total RAB {budgetFormat.format(totalCosts(costs))}</strong>
           </div>
@@ -290,10 +290,10 @@ function Drafts({ endpoint }: { endpoint: string }) {
               {(["from", "to"] as const).map(key => <Input label={key === "from" ? "Bulan mulai" : "Bulan selesai"} key={key}
                 type="number" min={key === "to" ? row.from : 1} max={8} required value={row[key] || ""}
                 onChange={event => update("schedule", schedule.map((item, i) => i === index ? { ...item, [key]: Number(event.target.value) } : item))} />)}
-              <Button type="button" variant="ghost" className="text-destructive" onClick={() => update("schedule", schedule.filter((_, i) => i !== index))}
+              <Button data-action-tone="danger" type="button" variant="ghost" className="text-destructive" onClick={() => update("schedule", schedule.filter((_, i) => i !== index))}
                 aria-label={`Hapus kegiatan ${index + 1}`}><Trash2 size={16} aria-hidden="true" /></Button>
             </div>)}
-            <Button type="button" size="sm" variant="outline" disabled={schedule.length >= 30}
+            <Button data-action-tone="positive" type="button" size="sm" variant="outline" disabled={schedule.length >= 30}
               onClick={() => update("schedule", [...schedule, { activity: "", from: 1, to: 1 }])}><Plus size={16} aria-hidden="true" /> Tambah kegiatan</Button>
           </div>
         </fieldset>
@@ -307,7 +307,7 @@ function Drafts({ endpoint }: { endpoint: string }) {
           {narrative("references", "Pustaka yang dikutip", "Gunakan nomor menurut urutan pengutipan (gaya Vancouver).")}
         </fieldset>
         <div className="flex flex-wrap gap-2">
-          <Button type="submit" disabled={pending}>{pending ? "Menyimpan…" : "Simpan draf"}</Button>
+          <Button data-action-tone="positive" type="submit" disabled={pending}><Save size={15} aria-hidden="true" /> {pending ? "Menyimpan…" : "Simpan draf"}</Button>
           <Button type="button" variant="outline" disabled={pending} onClick={() => { setDraft(undefined); setError(""); }}>Batal</Button>
         </div>
       </form></CardContent>

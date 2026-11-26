@@ -1,5 +1,6 @@
 "use client";
 
+import { Save } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -19,9 +20,10 @@ interface LecturerProfile {
   jafung: string;
   studyProgram: string;
   active: boolean;
+  profileLocked: boolean;
 }
 
-const jafungOptions = [
+export const jafungOptions = [
   { value: "", label: "Belum diatur" },
   { value: "tenaga_pengajar", label: "Tenaga Pengajar" },
   { value: "asisten_ahli", label: "Asisten Ahli" },
@@ -78,12 +80,8 @@ export function LecturerProfileSettings({ institutionId }: { institutionId: numb
         body: JSON.stringify({ nuptk: nuptk.trim(), phone: phone.trim(), jafung }),
       });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.error ?? "Gagal menyimpan profil dosen.");
-      const updated = body as LecturerProfile;
-      setProfile(updated);
-      setNuptk(updated.nuptk ?? "");
-      setPhone(updated.phone ?? "");
-      setJafung(updated.jafung ?? "");
+      if (!res.ok) throw new Error(body.message ?? body.error ?? "Gagal menyimpan profil dosen.");
+      setProfile(current => current && { ...current, nuptk: nuptk.trim(), phone: phone.trim(), jafung });
       toast.success("Profil dosen berhasil diperbarui.", workspaceToastOptions);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Gagal menyimpan profil dosen.";
@@ -93,6 +91,8 @@ export function LecturerProfileSettings({ institutionId }: { institutionId: numb
       setSaving(false);
     }
   }
+
+  const editable = !!profile?.active && !profile.profileLocked;
 
   return (
     <Card>
@@ -104,7 +104,7 @@ export function LecturerProfileSettings({ institutionId }: { institutionId: numb
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         {!loading && profile && !profile.linked && (
           <p className="text-sm text-muted-foreground">
-            Akun Anda belum terhubung ke data dosen. Hubungi admin institusi untuk menghubungkan akun Anda di Master Data Dosen.
+            Profil dosen belum tersedia. Hubungi admin untuk memeriksa data dan email Anda di Master Data Dosen.
           </p>
         )}
         {!loading && profile?.linked && (
@@ -123,17 +123,23 @@ export function LecturerProfileSettings({ institutionId }: { institutionId: numb
                 <dd className="font-medium">{profile.studyProgram || "-"}</dd>
               </div>
               <div>
+                <dt className="text-muted-foreground">Email Dosen</dt>
+                <dd className="font-medium break-all">{profile.email || "-"}</dd>
+              </div>
+              <div>
                 <dt className="text-muted-foreground">Status Dosen</dt>
                 <dd className="font-medium">{profile.active ? "Aktif" : "Nonaktif"}</dd>
               </div>
             </dl>
+            {profile.profileLocked && <p className="text-sm font-medium">Profil dikunci oleh admin.</p>}
             <form onSubmit={e => void handleSubmit(e)} className="space-y-3 border-t border-border pt-3">
               <Input
                 label="NUPTK"
                 name="nuptk"
                 value={nuptk}
                 onChange={e => setNuptk(e.target.value)}
-                maxLength={32}
+                maxLength={64}
+                disabled={!editable || saving}
                 placeholder="Masukkan NUPTK dosen"
                 hint="Diperlukan untuk pengecekan kelayakan otomatis saat pengajuan skema hibah."
               />
@@ -144,12 +150,14 @@ export function LecturerProfileSettings({ institutionId }: { institutionId: numb
                 value={phone}
                 onChange={e => setPhone(e.target.value)}
                 maxLength={32}
+                disabled={!editable || saving}
                 placeholder="08xxxxxxxxxx"
               />
               <Field id="lecturer-jafung" label="Jabatan Fungsional">
                 <select
                   id="lecturer-jafung"
                   name="jafung"
+                  disabled={!editable || saving}
                   value={jafung}
                   onChange={e => setJafung(e.target.value)}
                   className={cn(fieldClass, "flex h-9 bg-background px-3 py-1")}
@@ -161,9 +169,10 @@ export function LecturerProfileSettings({ institutionId }: { institutionId: numb
                   ))}
                 </select>
               </Field>
-              <Button type="submit" disabled={saving}>
+              {editable && <Button data-action-tone="positive" type="submit" disabled={saving}>
+                <Save size={15} aria-hidden="true" />
                 {saving ? "Menyimpan..." : "Simpan profil dosen"}
-              </Button>
+              </Button>}
             </form>
           </>
         )}

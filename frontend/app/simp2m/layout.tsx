@@ -9,9 +9,10 @@ export default async function WorkspaceLayout({ children }: { children: React.Re
   const { user, institutions } = await getWorkspaceSession();
   const preferences = await cookies();
   const theme = preferences.get("simp2m_theme")?.value;
+  const iconColor = preferences.get("simp2m_icon_color")?.value;
   const date = new Intl.DateTimeFormat("id-ID", { dateStyle: "full", timeZone: "Asia/Jakarta" }).format(new Date());
   return (
-    <WorkspacePreferences initialTheme={theme === "light" || theme === "system" ? theme : "dark"} initialCollapsed={preferences.get("simp2m_sidebar")?.value === "collapsed"}>
+    <WorkspacePreferences initialTheme={theme === "light" || theme === "system" ? theme : "dark"} initialCollapsed={preferences.get("simp2m_sidebar")?.value === "collapsed"} initialIconColor={iconColor ? `#${iconColor}` : undefined}>
     <WorkspaceShell
       name={user?.name}
       institution={user?.institution}

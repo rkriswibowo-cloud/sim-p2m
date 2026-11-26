@@ -31,12 +31,12 @@ var datasets = map[string]dataset{
 	"study-programs":      {table: "study_programs", parent: "faculties", parentRequired: true},
 	"units":               {table: "organization_units"},
 	"lecturers":           {table: "lecturers", parent: "study_programs", email: true, phone: true},
-	"students":          {table: "students", parent: "study_programs", email: true, parentRequired: true},
-	"reviewers":         {table: "reviewers", email: true},
-	"officials":         {table: "institution_officials", position: true},
-	"funding-sources":   {table: "funding_sources"},
-	"scheme-groups":     {table: "scheme_groups"},
-	"schemes":           {table: "schemes", parent: "scheme_groups", parentRequired: true, program: true},
+	"students":            {table: "students", parent: "study_programs", email: true, parentRequired: true},
+	"reviewers":           {table: "reviewers", email: true},
+	"officials":           {table: "institution_officials", position: true},
+	"funding-sources":     {table: "funding_sources"},
+	"scheme-groups":       {table: "scheme_groups"},
+	"schemes":             {table: "schemes", parent: "scheme_groups", parentRequired: true, program: true},
 	"research-fields":     {table: "research_fields"},
 	"budget-categories":   {table: "budget_categories"},
 	"output-target-years": {table: "output_target_years"},
@@ -51,6 +51,8 @@ type masterRecord struct {
 	ParentName string `json:"parentName"`
 	Email      string `json:"email"`
 	Phone      string `json:"phone,omitempty"`
+	NUPTK      string `json:"nuptk,omitempty"`
+	Jafung     string `json:"jafung,omitempty"`
 	Program    string `json:"program,omitempty"`
 	Position   string `json:"position,omitempty"`
 }
@@ -98,8 +100,12 @@ func (s service) listMaster(c *gin.Context, a actor) {
 	if d.program {
 		programCol = "m.program"
 	}
+	nuptkCol, jafungCol := "''", "''"
+	if d.table == "lecturers" {
+		nuptkCol, jafungCol = "m.nuptk", "m.jafung"
+	}
 	args := []any{a.tenant, after}
-	query := fmt.Sprintf("SELECT m.id,m.code,m.name,m.is_active,%s,%s,%s,%s,%s,%s FROM %s m%s WHERE m.institution_id=? AND m.id>?", parentID, parentName, email, phoneCol, programCol, posCol, d.table, join)
+	query := fmt.Sprintf("SELECT m.id,m.code,m.name,m.is_active,%s,%s,%s,%s,%s,%s,%s,%s FROM %s m%s WHERE m.institution_id=? AND m.id>?", parentID, parentName, email, phoneCol, programCol, posCol, nuptkCol, jafungCol, d.table, join)
 	if status != "" {
 		query += " AND m.is_active=?"
 		args = append(args, status == "active")
@@ -118,7 +124,7 @@ func (s service) listMaster(c *gin.Context, a actor) {
 	items := []masterRecord{}
 	for rows.Next() {
 		var item masterRecord
-		if err := rows.Scan(&item.ID, &item.Code, &item.Name, &item.Active, &item.ParentID, &item.ParentName, &item.Email, &item.Phone, &item.Program, &item.Position); err != nil {
+		if err := rows.Scan(&item.ID, &item.Code, &item.Name, &item.Active, &item.ParentID, &item.ParentName, &item.Email, &item.Phone, &item.Program, &item.Position, &item.NUPTK, &item.Jafung); err != nil {
 			c.Status(503)
 			return
 		}
@@ -146,6 +152,7 @@ func (s service) saveMaster(c *gin.Context, a actor) {
 		Code, Name, Email, Phone, Program, Position string
 		Active                                      *bool
 		ParentID                                    *int64
+		NUPTK, Jafung                               *string
 	}
 	if c.ShouldBindJSON(&input) != nil || input.Active == nil {
 		c.Status(400)
@@ -187,9 +194,23 @@ func (s service) saveMaster(c *gin.Context, a actor) {
 		}
 		input.Email = email
 	}
+	isLecturer := d.table == "lecturers"
+	if isLecturer {
+		if input.NUPTK != nil {
+			*input.NUPTK = strings.TrimSpace(*input.NUPTK)
+		}
+		if (input.NUPTK != nil && len(*input.NUPTK) > 64) || (input.Jafung != nil && !validJafungValues[*input.Jafung]) {
+			c.JSON(400, gin.H{"message": "Periksa NUPTK dan pilihan jabatan fungsional."})
+			return
+		}
+	}
 	id := target(c)
 	if c.Param("target") != "" && id < 1 {
 		c.Status(400)
+		return
+	}
+	if isLecturer && id == 0 && *input.Active && input.Email == "" {
+		c.JSON(400, gin.H{"message": "Email diperlukan untuk membuat akun dosen aktif."})
 		return
 	}
 	s.change(c, a, "masterdata."+c.Param("kind")+".save", func(ctx context.Context, tx *sql.Tx) (int64, error) {
@@ -197,6 +218,16 @@ func (s service) saveMaster(c *gin.Context, a actor) {
 			var found int64
 			if err := tx.QueryRowContext(ctx, "SELECT id FROM "+d.table+" WHERE institution_id=? AND id=? FOR UPDATE", a.tenant, id).Scan(&found); err != nil {
 				return 0, err
+			}
+		}
+		if isLecturer && input.Email != "" {
+			var duplicate bool
+			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM lecturers
+ WHERE institution_id=? AND id<>? AND email=?)`, a.tenant, id, input.Email).Scan(&duplicate); err != nil {
+				return 0, err
+			}
+			if duplicate {
+				return 0, fmt.Errorf("%w: Email sudah digunakan oleh dosen lain di institusi ini.", invalidProposal)
 			}
 		}
 		if input.ParentID != nil {
@@ -242,6 +273,14 @@ func (s service) saveMaster(c *gin.Context, a actor) {
 			fields = append(fields, "program")
 			values = append(values, input.Program)
 		}
+		if isLecturer && input.NUPTK != nil {
+			fields = append(fields, "nuptk")
+			values = append(values, *input.NUPTK)
+		}
+		if isLecturer && input.Jafung != nil {
+			fields = append(fields, "jafung")
+			values = append(values, *input.Jafung)
+		}
 		if id == 0 {
 			fields = append(fields, "institution_id")
 			values = append(values, a.tenant)
@@ -250,10 +289,25 @@ func (s service) saveMaster(c *gin.Context, a actor) {
 			if err != nil {
 				return 0, err
 			}
-			return result.LastInsertId()
+			id, err = result.LastInsertId()
+			if err != nil {
+				return 0, err
+			}
+		} else {
+			query := "UPDATE " + d.table + " SET " + strings.Join(fields, "=?,") + "=? WHERE institution_id=? AND id=?"
+			if _, err := tx.ExecContext(ctx, query, append(values, a.tenant, id)...); err != nil {
+				return 0, err
+			}
 		}
-		query := "UPDATE " + d.table + " SET " + strings.Join(fields, "=?,") + "=? WHERE institution_id=? AND id=?"
-		_, err := tx.ExecContext(ctx, query, append(values, a.tenant, id)...)
-		return id, err
+		if isLecturer {
+			err := provisionLecturerAccount(ctx, tx, a.tenant, id)
+			if errors.Is(err, duplicateLecturerEmail) {
+				return 0, fmt.Errorf("%w: Email sudah digunakan oleh dosen lain di institusi ini.", invalidProposal)
+			}
+			if err != nil {
+				return 0, err
+			}
+		}
+		return id, nil
 	})
 }

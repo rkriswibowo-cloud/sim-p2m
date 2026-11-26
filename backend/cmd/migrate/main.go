@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"simp2m/backend/internal/core/database"
+	"simp2m/backend/internal/modules/iam"
 	"simp2m/backend/migrations"
 )
 
@@ -23,6 +24,9 @@ func main() {
 	}
 	defer db.Close()
 	if err := migrations.Apply(ctx, db); err != nil {
+		log.Fatal(err)
+	}
+	if err := iam.ProvisionExistingLecturers(ctx, db); err != nil {
 		log.Fatal(err)
 	}
 	log.Print("SIM-P2M schema is up to date")

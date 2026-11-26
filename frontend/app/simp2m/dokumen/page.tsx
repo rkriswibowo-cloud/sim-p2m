@@ -21,7 +21,7 @@ export default async function DocumentsPage() {
         {!!documents?.length && <ul className="divide-y divide-border">
           {documents.map(document => <li key={document.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
             <span className="flex min-w-0 items-center gap-2"><FileText size={18} className="shrink-0 text-muted-foreground" aria-hidden="true" /> <span className="wrap-anywhere">{document.name}</span></span>
-            <a className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted" href={`${endpoint}/${document.id}`} aria-label={`Unduh ${document.name}`}>
+            <a data-action-tone="info" className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted" href={`${endpoint}/${document.id}`} aria-label={`Unduh ${document.name}`}>
               <Download size={16} aria-hidden="true" /> Unduh
             </a>
           </li>)}

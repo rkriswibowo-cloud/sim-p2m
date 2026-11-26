@@ -1,6 +1,6 @@
 "use client";
 
-import { CircleCheck, ClipboardList, Pencil, Plus, Trash2, Wallet } from "lucide-react";
+import { CircleCheck, ClipboardList, Download, Eye, Pencil, Plus, Save, Trash2, Upload, Wallet } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { toast } from "sonner";
@@ -255,7 +255,7 @@ export function ReportsPanel({ institutions, onlyKind }: { institutions: { id: n
                   className="block w-full rounded-md border border-input bg-background p-2" />}
             </label>
             {editor.kind === "final" && key === "method" && editor.methodDiagram && <a className="text-xs text-brand underline"
-              href={`${endpoint}/${editor.proposalId}/method-diagram`} target="_blank" rel="noreferrer">Lihat diagram metode dari usulan</a>}
+              href={`${endpoint}/${editor.proposalId}/method-diagram`} target="_blank" rel="noreferrer"><Eye size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" /> Lihat diagram metode dari usulan</a>}
           </div>)}
         </fieldset>
         {editor.kind === "progress" && <OutputProgressFields editor={editor} disabled={pending}
@@ -263,7 +263,7 @@ export function ReportsPanel({ institutions, onlyKind }: { institutions: { id: n
         {editor.kind === "final" && <FinalAttachments endpoint={`${endpoint}/${editor.proposalId}`} poster={editor.poster} disabled={pending}
           onUpload={uploading => { setPending(uploading); if (!uploading) setRefresh(value => value + 1); }} />}
         <div className="flex flex-wrap gap-2">
-          <Button type="submit" disabled={pending}>Simpan draf</Button>
+          <Button data-action-tone="positive" type="submit" disabled={pending}><Save size={15} aria-hidden="true" /> Simpan draf</Button>
           <Button type="button" variant="outline" disabled={pending} onClick={() => { setEditor(undefined); setError(""); }}>Batal</Button>
         </div>
       </form></CardContent>
@@ -285,9 +285,10 @@ export function ReportsPanel({ institutions, onlyKind }: { institutions: { id: n
                     <span className="text-sm">{labels[kind]}</span>
                     {kind === "progress" && <div className="mt-1 space-y-1 text-xs">
                       <p className="text-muted-foreground">{proposal.outputTargets?.length ?? 0} target luaran · isi kemajuannya di draf laporan</p>
-                      {proposal.progressUploaded ? <a className="text-brand underline" href={`${endpoint}/${proposal.proposalId}/progress-file`}>Unduh PDF yang diunggah</a> :
+                      {proposal.progressUploaded ? <a className="text-brand underline" href={`${endpoint}/${proposal.proposalId}/progress-file`}><Download size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" /> Unduh PDF yang diunggah</a> :
                         <p className="text-muted-foreground">Unggah PDF laporan untuk membuka pencairan sisa 25%.</p>}
                       {enabled && <label className="block">
+                        <Upload size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" />
                         {proposal.progressUploaded ? "Ganti PDF laporan" : "Unggah PDF laporan"}
                         <input className="mt-1 block max-w-full" type="file" accept="application/pdf,.pdf" disabled={pending}
                           onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void uploadProgress(proposal.proposalId, file); }} />
@@ -296,11 +297,11 @@ export function ReportsPanel({ institutions, onlyKind }: { institutions: { id: n
                     {!enabled && <p className="text-xs text-muted-foreground">Belum diaktifkan Admin/Superadmin</p>}
                   </div>
                   <div className="flex gap-1">
-                    <Button type="button" variant="ghost" size="sm" disabled={pending || !enabled} onClick={() => open(proposal, kind)} aria-label={`${existing ? "Ubah" : "Buat"} ${labels[kind]}`}>
-                      {existing ? <Pencil size={15} /> : <Plus size={15} />} {existing ? "Ubah draf" : "Buat draf"}
+                    <Button data-action-tone={existing ? "edit" : "positive"} type="button" variant="ghost" size="sm" disabled={pending || !enabled} onClick={() => open(proposal, kind)} aria-label={`${existing ? "Ubah" : "Buat"} ${labels[kind]}`}>
+                      {existing ? <Pencil size={15} aria-hidden="true" /> : <Plus size={15} aria-hidden="true" />} {existing ? "Ubah draf" : "Buat draf"}
                     </Button>
-                    {existing && <Button type="button" variant="ghost" size="icon-sm" disabled={pending || !enabled} className="text-destructive" aria-label={`Hapus draf ${labels[kind]}`}
-                      onClick={() => void change({ ...existing, kind }, "DELETE")}><Trash2 size={15} /></Button>}
+                    {existing && <Button data-action-tone="danger" type="button" variant="ghost" size="icon-sm" disabled={pending || !enabled} className="text-destructive" aria-label={`Hapus draf ${labels[kind]}`}
+                      onClick={() => void change({ ...existing, kind }, "DELETE")}><Trash2 size={15} aria-hidden="true" /></Button>}
                   </div>
                 </div>;
               })}

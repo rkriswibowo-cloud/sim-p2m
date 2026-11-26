@@ -1,5 +1,6 @@
 "use client";
 
+import { CircleCheck, CircleX, Eye, Pencil, Save, Trash2, UserCheck, UserPlus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -237,7 +238,7 @@ export function SelectionPanel() {
                 <button key={p.id} type="button" onClick={() => { setSelected(p); setDecisionBudget(p.approvedBudget ?? p.budget); setDecisionNote(p.decisionNote); }}
                   className={`w-full rounded-md border p-3 text-left text-sm transition ${selected?.id === p.id ? "border-brand bg-accent/40" : "border-border hover:bg-muted/40"}`}>
                   <div className="flex items-start justify-between gap-2">
-                    <p className="font-semibold line-clamp-2">#{p.id} · {p.title || "Tanpa judul"}</p>
+                    <p className="font-semibold line-clamp-2"><Eye size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" /> #{p.id} · {p.title || "Tanpa judul"}</p>
                     <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium">{wfLabels[p.workflowStatus] ?? p.workflowStatus}</span>
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">{p.owner} · {p.scheme}</p>
@@ -276,38 +277,38 @@ export function SelectionPanel() {
                       <Input id="wf-note" label="Catatan Transisi (wajib untuk revisi / penolakan)" value={transNote} onChange={(e) => setTransNote(e.target.value)} />
                       <div className="flex flex-wrap gap-2 pt-1">
                         {selected.workflowStatus === "submitted" && (
-                          <Button size="sm" disabled={pending} onClick={() => void run(async () => {
+                          <Button data-action-tone="positive" size="sm" disabled={pending} onClick={() => void run(async () => {
                             await api(`${base}/institutions/${tenant}/workflow/proposals/${selected.id}/transition`, json("POST", { toStatus: "admin_verified", note: transNote, revision: selected.revision }));
                             setTransNote("");
                             toast.success("Usulan lolos verifikasi administrasi.", workspaceToastOptions);
-                          })}>Lolos Administrasi</Button>
+                          })}><CircleCheck size={15} aria-hidden="true" /> Lolos Administrasi</Button>
                         )}
                         {(selected.workflowStatus === "submitted" || selected.workflowStatus === "admin_verified") && (
                           <>
-                            <Button size="sm" variant="outline" disabled={pending} onClick={() => void run(async () => {
+                            <Button data-action-tone="edit" size="sm" variant="outline" disabled={pending} onClick={() => void run(async () => {
                               await api(`${base}/institutions/${tenant}/workflow/proposals/${selected.id}/transition`, json("POST", { toStatus: "admin_revision", note: transNote, revision: selected.revision }));
                               setTransNote("");
                               toast.success("Dikembalikan untuk revisi administrasi.", workspaceToastOptions);
-                            })}>Minta Revisi Admin</Button>
-                            <Button size="sm" variant="destructive" disabled={pending} onClick={() => void run(async () => {
+                            })}><Pencil size={15} aria-hidden="true" /> Minta Revisi Admin</Button>
+                            <Button data-action-tone="danger" size="sm" variant="destructive" disabled={pending} onClick={() => void run(async () => {
                               await api(`${base}/institutions/${tenant}/workflow/proposals/${selected.id}/transition`, json("POST", { toStatus: "rejected_admin", note: transNote, revision: selected.revision }));
                               setTransNote("");
                               toast.success("Usulan ditolak secara administratif.", workspaceToastOptions);
-                            })}>Tolak Administrasi</Button>
+                            })}><CircleX size={15} aria-hidden="true" /> Tolak Administrasi</Button>
                           </>
                         )}
                         {selected.workflowStatus === "under_review" && (
                           <>
-                            <Button size="sm" disabled={pending} onClick={() => void run(async () => {
+                            <Button data-action-tone="positive" size="sm" disabled={pending} onClick={() => void run(async () => {
                               await api(`${base}/institutions/${tenant}/workflow/proposals/${selected.id}/transition`, json("POST", { toStatus: "review_completed", note: transNote, revision: selected.revision }));
                               setTransNote("");
                               toast.success("Proses review diselesaikan.", workspaceToastOptions);
-                            })}>Selesaikan Review</Button>
-                            <Button size="sm" variant="outline" disabled={pending} onClick={() => void run(async () => {
+                            })}><CircleCheck size={15} aria-hidden="true" /> Selesaikan Review</Button>
+                            <Button data-action-tone="edit" size="sm" variant="outline" disabled={pending} onClick={() => void run(async () => {
                               await api(`${base}/institutions/${tenant}/workflow/proposals/${selected.id}/transition`, json("POST", { toStatus: "review_revision", note: transNote, revision: selected.revision }));
                               setTransNote("");
                               toast.success("Dikembalikan untuk revisi substansi.", workspaceToastOptions);
-                            })}>Minta Revisi Substansi</Button>
+                            })}><Pencil size={15} aria-hidden="true" /> Minta Revisi Substansi</Button>
                           </>
                         )}
                       </div>
@@ -325,10 +326,10 @@ export function SelectionPanel() {
                           <div className="flex items-center gap-2">
                             <span className="rounded bg-muted px-1.5 py-0.5">{a.status}</span>
                             {canVerify && !readOnly && a.status !== "completed" && (
-                              <Button size="sm" variant="ghost" className="h-6 px-2 text-destructive" disabled={pending} onClick={() => void run(async () => {
+                              <Button data-action-tone="danger" size="sm" variant="ghost" className="h-6 px-2 text-destructive" disabled={pending} onClick={() => void run(async () => {
                                 await api(`${base}/institutions/${tenant}/workflow/assignments/${a.id}`, { method: "DELETE" });
                                 toast.success("Penugasan reviewer dicabut.", workspaceToastOptions);
-                              })}>Hapus</Button>
+                              })}><Trash2 size={15} aria-hidden="true" /> Hapus</Button>
                             )}
                           </div>
                         </div>
@@ -358,13 +359,13 @@ export function SelectionPanel() {
                           <label className="flex items-center gap-1.5 text-xs">
                             <input type="checkbox" checked={assignBlind} onChange={(e) => setAssignBlind(e.target.checked)} /> Blind Review
                           </label>
-                          <Button size="sm" disabled={pending || assignReviewerId < 1} onClick={() => void run(async () => {
+                          <Button data-action-tone="positive" size="sm" disabled={pending || assignReviewerId < 1} onClick={() => void run(async () => {
                             await api(`${base}/institutions/${tenant}/workflow/proposals/${selected.id}/reviewers`, json("POST", {
                               reviewerId: assignReviewerId, blindReview: assignBlind, dueDate: assignDue,
                             }));
                             setAssignReviewerId(0); setAssignDue("");
                             toast.success("Reviewer ditugaskan.", workspaceToastOptions);
-                          })}>Tugaskan Reviewer</Button>
+                          })}><UserPlus size={15} aria-hidden="true" /> Tugaskan Reviewer</Button>
                         </div>
                       </div>
                     )}
@@ -379,18 +380,18 @@ export function SelectionPanel() {
                         <Input id="dec-note" label="Catatan Keputusan" value={decisionNote} onChange={(e) => setDecisionNote(e.target.value)} />
                       </div>
                       <div className="flex flex-wrap gap-2 pt-1">
-                        <Button size="sm" disabled={pending} onClick={() => void run(async () => {
+                        <Button data-action-tone="positive" size="sm" disabled={pending} onClick={() => void run(async () => {
                           await api(`${base}/institutions/${tenant}/workflow/proposals/${selected.id}/decision`, json("POST", {
                             decision: "funded", approvedBudget: decisionBudget, note: decisionNote,
                           }));
                           toast.success("Usulan ditetapkan DIDANAI.", workspaceToastOptions);
-                        })}>Tetapkan Didanai</Button>
-                        <Button size="sm" variant="destructive" disabled={pending} onClick={() => void run(async () => {
+                        })}><CircleCheck size={15} aria-hidden="true" /> Tetapkan Didanai</Button>
+                        <Button data-action-tone="danger" size="sm" variant="destructive" disabled={pending} onClick={() => void run(async () => {
                           await api(`${base}/institutions/${tenant}/workflow/proposals/${selected.id}/decision`, json("POST", {
                             decision: "not_funded", approvedBudget: "0", note: decisionNote,
                           }));
                           toast.success("Usulan ditetapkan TIDAK DIDANAI.", workspaceToastOptions);
-                        })}>Tetapkan Tidak Didanai</Button>
+                        })}><CircleX size={15} aria-hidden="true" /> Tetapkan Tidak Didanai</Button>
                       </div>
                     </div>
                   )}
@@ -426,7 +427,7 @@ export function SelectionPanel() {
                 <button key={item.assignmentId} type="button" onClick={() => openReviewForm(item)}
                   className={`w-full rounded-md border p-3 text-left text-sm transition ${activeReview?.assignmentId === item.assignmentId ? "border-brand bg-accent/40" : "border-border hover:bg-muted/40"}`}>
                   <div className="flex items-start justify-between gap-2">
-                    <p className="font-semibold">{item.title || "Tanpa judul"}</p>
+                    <p className="font-semibold"><Eye size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" /> {item.title || "Tanpa judul"}</p>
                     <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px]">{item.status}</span>
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">{item.owner} · {item.scheme}</p>
@@ -448,7 +449,7 @@ export function SelectionPanel() {
                     <p><strong>Pengusul:</strong> {activeReview.owner} {activeReview.blindReview ? "(Mode Blind Review Aktif)" : ""}</p>
                     <p><strong>Skema:</strong> {activeReview.scheme} · <strong>RAB:</strong> {money.format(BigInt(activeReview.budget))}</p>
                     <details className="pt-2">
-                      <summary className="cursor-pointer font-semibold text-brand">Lihat Ringkasan &amp; Substansi Usulan</summary>
+                      <summary className="cursor-pointer font-semibold text-brand"><Eye size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" /> Lihat Ringkasan &amp; Substansi Usulan</summary>
                       <div className="mt-2 space-y-2 border-t border-border pt-2">
                         <div><strong>Ringkasan:</strong> <p className="whitespace-pre-wrap text-muted-foreground">{stripHtml(activeReview.data.summary ?? "") || "-"}</p></div>
                         <div><strong>Pendahuluan:</strong> <p className="whitespace-pre-wrap text-muted-foreground">{stripHtml(activeReview.data.introduction ?? "") || "-"}</p></div>
@@ -462,16 +463,16 @@ export function SelectionPanel() {
                     <div className="rounded-md border border-border p-3 space-y-2">
                       <p className="text-xs font-medium">Konfirmasi kesediaan &amp; bebas konflik kepentingan sebelum menilai:</p>
                       <div className="flex flex-wrap gap-2">
-                        <Button size="sm" disabled={pending} onClick={() => void run(async () => {
+                        <Button data-action-tone="positive" size="sm" disabled={pending} onClick={() => void run(async () => {
                           await api(`${base}/institutions/${tenant}/reviews/${activeReview.assignmentId}/conflict`, json("POST", { status: "accepted", note: "" }));
                           toast.success("Penugasan diterima.", workspaceToastOptions);
-                        })}>Terima Penugasan Review</Button>
-                        <Button size="sm" variant="destructive" disabled={pending} onClick={() => void run(async () => {
+                        })}><UserCheck size={15} aria-hidden="true" /> Terima Penugasan Review</Button>
+                        <Button data-action-tone="danger" size="sm" variant="destructive" disabled={pending} onClick={() => void run(async () => {
                           const reason = window.prompt("Alasan penolakan / konflik kepentingan:") ?? "";
                           if (!reason.trim()) return;
                           await api(`${base}/institutions/${tenant}/reviews/${activeReview.assignmentId}/conflict`, json("POST", { status: "declined", note: reason }));
                           toast.success("Penugasan ditolak.", workspaceToastOptions);
-                        })}>Tolak / Konflik Kepentingan</Button>
+                        })}><CircleX size={15} aria-hidden="true" /> Tolak / Konflik Kepentingan</Button>
                       </div>
                     </div>
                   )}
@@ -508,7 +509,7 @@ export function SelectionPanel() {
                           className="w-full rounded-md border border-input bg-background p-2 text-sm" />
                       </div>
                       {!readOnly && (
-                        <Button size="sm" disabled={pending} onClick={() => void run(async () => {
+                        <Button data-action-tone="positive" size="sm" disabled={pending} onClick={() => void run(async () => {
                           await api(`${base}/institutions/${tenant}/reviews/${activeReview.assignmentId}/submit`, json("POST", {
                             scoreRelevance: scoreRel,
                             scoreMethod: scoreMet,
@@ -519,7 +520,7 @@ export function SelectionPanel() {
                             internalComment: intlComment,
                           }));
                           toast.success("Hasil review berhasil dikirim.", workspaceToastOptions);
-                        })}>Simpan &amp; Kirim Hasil Review</Button>
+                        })}><Save size={15} aria-hidden="true" /> Simpan &amp; Kirim Hasil Review</Button>
                       )}
                     </div>
                   )}

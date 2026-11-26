@@ -1,5 +1,6 @@
 "use client";
 
+import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RichTextEditor } from "./rich-editor";
@@ -144,8 +145,8 @@ export function ProposalFields({ step, data, options, title, field, budget, cons
           return <Input key={column.key} id={id} label={column.name} type={column.type ?? "text"} min={column.type==="number" ? 1 : undefined}
             value={item[column.key] || ""} disabled={disabled} onChange={event=>update(column.type==="number" ? Number(event.target.value) : event.target.value)} />;
         })}
-        {!disabled && <Button type="button" variant="ghost" size="sm" className="shrink-0 justify-self-start text-destructive"
-          aria-label={`Hapus baris ${definition.title} ${index+1}`} onClick={()=>onData({...data,[key]:items.filter((_,i)=>i!==index)})}>{singleRowGrid[key] ? "Hapus" : "Hapus baris"}</Button>}
+        {!disabled && <Button data-action-tone="danger" type="button" variant="ghost" size="sm" className="shrink-0 justify-self-start text-destructive"
+          aria-label={`Hapus baris ${definition.title} ${index+1}`} onClick={()=>onData({...data,[key]:items.filter((_,i)=>i!==index)})}><Trash2 size={15} aria-hidden="true" /> {singleRowGrid[key] ? "Hapus" : "Hapus baris"}</Button>}
         {key==="team" && !communityTeam && Number(item.id) > 0 && (() => {
           const c = consents?.find(row => row.lecturerId === Number(item.id));
           if (!c) return <span className="whitespace-nowrap pb-2 text-xs text-muted-foreground">Menunggu simpan</span>;
@@ -155,7 +156,7 @@ export function ProposalFields({ step, data, options, title, field, budget, cons
         })()}
       </div>)}
       </div>
-      {!disabled && !(key==="team" && items.length>=3) && <Button type="button" variant="outline" size="sm" onClick={()=>onData({...data,[key]:[...items,{}]})}>Tambah {definition.title.toLowerCase()}</Button>}
+      {!disabled && !(key==="team" && items.length>=3) && <Button data-action-tone="positive" type="button" variant="outline" size="sm" onClick={()=>onData({...data,[key]:[...items,{}]})}><Plus size={15} aria-hidden="true" /> Tambah {definition.title.toLowerCase()}</Button>}
     </fieldset>;
   }
 

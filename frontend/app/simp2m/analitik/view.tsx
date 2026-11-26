@@ -1,5 +1,6 @@
 "use client";
 
+import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "../penelitian/view";
@@ -206,8 +207,8 @@ export function AnalyticsPanel() {
                 <div key={kind} className="rounded-md border border-border p-3 space-y-2">
                   <p className="font-semibold text-sm">{label}</p>
                   <div className="flex gap-2">
-                    <a href={exportHref(kind, "xls")} className="inline-flex items-center rounded border border-input bg-background px-2.5 py-1 font-medium hover:bg-accent">Excel (.xls)</a>
-                    <a href={exportHref(kind, "csv")} className="inline-flex items-center rounded border border-input bg-background px-2.5 py-1 font-medium hover:bg-accent">CSV</a>
+                    <a data-action-tone="info" href={exportHref(kind, "xls")} className="inline-flex items-center rounded border border-input bg-background px-2.5 py-1 font-medium hover:bg-accent"><Download size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" /> Excel (.xls)</a>
+                    <a data-action-tone="info" href={exportHref(kind, "csv")} className="inline-flex items-center rounded border border-input bg-background px-2.5 py-1 font-medium hover:bg-accent"><Download size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" /> CSV</a>
                   </div>
                 </div>
               ))}

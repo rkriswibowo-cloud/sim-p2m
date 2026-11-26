@@ -1,6 +1,7 @@
 "use client";
 
-import { Monitor, Moon, Sun } from "lucide-react";
+import { FlaskConical, Monitor, Moon, RotateCcw, Sun } from "lucide-react";
+import { HexColorInput, HexColorPicker } from "react-colorful";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,7 +16,8 @@ const themes = [
 ] as const;
 
 export function AppearanceSettings() {
-  const { theme, collapsed, save } = useWorkspacePreferences();
+  const { theme, appearance, collapsed, iconColor, saveIconColor, save } = useWorkspacePreferences();
+  const pickerColor = iconColor || (appearance === "light" ? "#28557c" : "#a3c9ec");
 
   function update(nextTheme: Theme, nextCollapsed: boolean) {
     save(nextTheme, nextCollapsed);
@@ -38,9 +40,30 @@ export function AppearanceSettings() {
         <input type="checkbox" checked={collapsed} onChange={event => update(theme, event.target.checked)} />
         Ciutkan sidebar desktop
       </label>
+      <fieldset className="space-y-3 border-t border-border pt-3">
+        <legend className="pr-2 text-sm font-medium">Warna ikon navigasi</legend>
+        <div className="flex flex-wrap items-start gap-4">
+          <HexColorPicker color={pickerColor} onChange={saveIconColor} role="group" aria-label="Pemilih warna ikon" />
+          <div className="space-y-2">
+            <label htmlFor="workspace-icon-hex" className="block text-sm">Kode HEX</label>
+            <HexColorInput id="workspace-icon-hex" color={pickerColor} onChange={saveIconColor} prefixed
+              className="w-28 rounded-md border border-input bg-card px-2 py-1 font-mono text-sm" />
+            <div className="workspace-icon-preview flex items-center gap-2 rounded-md border border-border bg-card px-2 py-1 text-sm">
+              <FlaskConical size={17} aria-hidden="true" /> Pratinjau ikon
+            </div>
+            {iconColor && <Button data-action-tone="attention" type="button" size="sm" variant="outline" onClick={() => saveIconColor("")}>
+              <RotateCcw size={15} aria-hidden="true" /> Warna ikon bawaan
+            </Button>}
+          </div>
+        </div>
+      </fieldset>
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
         <p className="text-xs text-muted-foreground">Preferensi tersimpan di browser ini.</p>
-        <Button type="button" size="sm" variant="outline" disabled={theme === "dark" && !collapsed} onClick={() => update("dark", false)}>
+        <Button data-action-tone="attention" type="button" size="sm" variant="outline" disabled={theme === "dark" && !collapsed && !iconColor} onClick={() => {
+          saveIconColor("");
+          update("dark", false);
+        }}>
+          <RotateCcw size={15} aria-hidden="true" />
           Kembalikan bawaan
         </Button>
       </div>

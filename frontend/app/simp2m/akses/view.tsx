@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil, Trash2 } from "lucide-react";
+import { Eye, Link2, Pencil, Plus, RotateCcw, Save, Settings2, ShieldCheck, Trash2, UserCheck, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
@@ -279,13 +279,13 @@ export function AccessPanel({ section }: { section: "access" | "institutions" | 
             <form method="post" onSubmit={event => void submit(event, data => request(base + "/institutions", { code: data.get("code"), name: data.get("name") }), true)} className="workspace-fields grid items-end gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto]">
               <Input label="Kode institusi baru" name="code" required maxLength={32} />
               <Input label="Nama institusi baru" name="name" required maxLength={200} />
-              <Button disabled={pending}>Tambah institusi</Button>
+              <Button data-action-tone="positive" disabled={pending}><Plus size={15} aria-hidden="true" /> Tambah institusi</Button>
             </form>
             {id > 0 && <form key={id} method="post" onSubmit={event => void submit(event, data => request(endpoint, { name: data.get("name"), active: data.has("active") }, "PUT"))} className="workspace-fields mt-3 flex flex-wrap items-end gap-2 border-t border-border pt-3">
               <Input label="Nama institusi terpilih" name="name" required maxLength={200} defaultValue={institutions.find(item => item.id === id)?.name} />
               <label className="self-center text-sm"><input type="checkbox" name="active" defaultChecked={selected?.active} /> Institusi aktif</label>
-              <Button variant="outline" disabled={pending}>Simpan institusi</Button>
-              {selected?.active && <Button type="button" variant="outline" className="text-destructive" disabled={pending} onClick={() => void removeEntry(endpoint, `Hapus institusi ${selected.name}?`, "Institusi akan dinonaktifkan. Keanggotaan dan riwayatnya tetap tersimpan.")}>
+              <Button data-action-tone="positive" variant="outline" disabled={pending}><Save size={15} aria-hidden="true" /> Simpan institusi</Button>
+              {selected?.active && <Button data-action-tone="danger" type="button" variant="outline" className="text-destructive" disabled={pending} onClick={() => void removeEntry(endpoint, `Hapus institusi ${selected.name}?`, "Institusi akan dinonaktifkan. Keanggotaan dan riwayatnya tetap tersimpan.")}>
                 <Trash2 size={15} aria-hidden="true" /> Hapus institusi
               </Button>}
             </form>}
@@ -295,10 +295,10 @@ export function AccessPanel({ section }: { section: "access" | "institutions" | 
       {section === "audit" && selected?.canAudit && <Card className="workspace-panel rounded-md">
         <CardHeader><CardTitle>Audit</CardTitle></CardHeader>
         <CardContent className="space-y-2">
-          <Button variant="outline" onClick={() => void loadAudit()}>Lihat audit</Button>
+          <Button data-action-tone="info" variant="outline" onClick={() => void loadAudit()}><Eye size={15} aria-hidden="true" /> Lihat audit</Button>
           {audit?.length === 0 && <p className="text-sm">Belum ada peristiwa audit.</p>}
           {audit?.map(row => <p key={row.id} className="text-sm">{row.when} UTC · {row.action} · {row.role || "Tanpa sesi"} · {row.subject}</p>)}
-          {!!audit?.length && audit.length % 50 === 0 && <Button variant="outline" onClick={() => void loadAudit(audit.at(-1)?.id)}>Muat audit sebelumnya</Button>}
+          {!!audit?.length && audit.length % 50 === 0 && <Button data-action-tone="info" variant="outline" onClick={() => void loadAudit(audit.at(-1)?.id)}><Eye size={15} aria-hidden="true" /> Muat audit sebelumnya</Button>}
         </CardContent>
       </Card>}
       {section === "access" && workspace && (
@@ -307,7 +307,7 @@ export function AccessPanel({ section }: { section: "access" | "institutions" | 
             <CardHeader><CardTitle>Pengguna institusi</CardTitle></CardHeader>
             <CardContent className="workspace-fields space-y-3">
               {workspace.canCreateUser && <details className="rounded-md border border-border bg-background">
-                <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Tambah pengguna</summary>
+                <summary className="cursor-pointer px-3 py-2 text-sm font-medium"><UserPlus size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" /> Tambah pengguna</summary>
                 <form method="post" onSubmit={event => void submit(event, async data => {
                   await request(endpoint + "/users", {
                     ...Object.fromEntries(data),
@@ -335,18 +335,18 @@ export function AccessPanel({ section }: { section: "access" | "institutions" | 
                     </div>
                     <p className="text-xs text-muted-foreground">
                       {newAccess.permissions === null ? "Centang menu mengikuti role yang dipilih." : "Centang menu disesuaikan untuk akun ini."}
-                      {newAccess.permissions !== null && <button type="button" className="ml-2 text-brand underline"
-                        onClick={() => setNewAccess({ ...newAccess, permissions: null })}>Ikuti role lagi</button>}
+                      {newAccess.permissions !== null && <button data-action-tone="attention" type="button" className="ml-2 text-brand underline"
+                        onClick={() => setNewAccess({ ...newAccess, permissions: null })}><RotateCcw size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" /> Ikuti role lagi</button>}
                     </p>
                   </>}
-                  <Button disabled={pending} className="justify-self-start">Simpan pengguna</Button>
+                  <Button data-action-tone="positive" disabled={pending} className="justify-self-start"><Save size={15} aria-hidden="true" /> Simpan pengguna</Button>
                 </form>
               </details>}
               {system && <details className="rounded-md border border-border bg-background">
-                <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Hubungkan akun yang sudah ada</summary>
+                <summary className="cursor-pointer px-3 py-2 text-sm font-medium"><Link2 size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" /> Hubungkan akun yang sudah ada</summary>
                 <form method="post" onSubmit={event => void submit(event, data => request(endpoint + "/memberships", { email: data.get("email") }), true)} className="flex flex-wrap items-end gap-3 px-3 pb-3">
                   <Input label="Email akun yang sudah ada" name="email" type="email" required />
-                  <Button variant="outline" disabled={pending}>Tambahkan ke institusi</Button>
+                  <Button data-action-tone="positive" variant="outline" disabled={pending}><UserPlus size={15} aria-hidden="true" /> Tambahkan ke institusi</Button>
                 </form>
               </details>}
               {!visibleUsers.length ? <p className="text-sm">Belum ada pengguna dalam daftar ini.</p> : <>
@@ -377,8 +377,8 @@ export function AccessPanel({ section }: { section: "access" | "institutions" | 
                               <details><summary className="cursor-pointer">Pilih role ({draft.roles.length})</summary>
                                 <div className="pt-2"><RoleChoices roles={workspace.roles} value={draft.roles} disabled={pending} onChange={roles => changeDraft({ ...draft, roles })} /></div>
                               </details>
-                              {draft.permissions !== null && <button type="button" disabled={pending}
-                                className="mt-2 text-brand underline" onClick={() => changeDraft({ ...draft, permissions: null })}>Ikuti role lagi</button>}
+                              {draft.permissions !== null && <button data-action-tone="attention" type="button" disabled={pending}
+                                className="mt-2 text-brand underline" onClick={() => changeDraft({ ...draft, permissions: null })}><RotateCcw size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" /> Ikuti role lagi</button>}
                               {savedRoles.length > 0 && <p className="mt-1 break-words text-muted-foreground">{savedRoles.map(role => role.name).join(", ")}</p>}
                             </> : <span className="break-words">{savedRoles.map(role => role.name).join(", ") || "—"}</span>}
                         </td>
@@ -390,8 +390,8 @@ export function AccessPanel({ section }: { section: "access" | "institutions" | 
                           {!item.superadmin && <form method="post" onSubmit={event => void submit(event, async () => {
                             await request(`${endpoint}/users/${item.id}`, { active: item.membership, ...permissionPayload(draft) }, "PUT");
                             setDrafts(previous => { const next = { ...previous }; delete next[item.id]; return next; });
-                          })}><Button size="sm" disabled={pending || !drafts[item.id]}>Simpan izin</Button></form>}
-                          <Button type="button" size="sm" variant="outline" disabled={pending} onClick={() => setProfileID(profileID === item.id ? 0 : item.id)}>
+                          })}><Button data-action-tone="positive" size="sm" disabled={pending || !drafts[item.id]}><Save size={15} aria-hidden="true" /> Simpan izin</Button></form>}
+                          <Button data-action-tone="edit" type="button" size="sm" variant="outline" disabled={pending} onClick={() => setProfileID(profileID === item.id ? 0 : item.id)}>
                             <Pencil size={14} aria-hidden="true" /> Profil
                           </Button>
                         </div></td>}
@@ -407,17 +407,17 @@ export function AccessPanel({ section }: { section: "access" | "institutions" | 
                     void submit(event, data => request(`${base}/users/${profile.id}/profile`, Object.fromEntries(data), "PUT"))}>
                     <Input id="profile-name" label="Nama akun" name="name" defaultValue={profile.name} required maxLength={160} />
                     <Input id="profile-email" label="Email akun" name="email" type="email" defaultValue={profile.email} required maxLength={254} />
-                    <Button variant="outline" disabled={pending}>Simpan profil</Button>
+                    <Button data-action-tone="positive" variant="outline" disabled={pending}><Save size={15} aria-hidden="true" /> Simpan profil</Button>
                   </form>
                   <div className="flex flex-wrap gap-2 border-t border-border pt-2">
-                    {profile.active ? <Button type="button" variant="outline" size="sm" className="text-destructive" disabled={pending}
-                      onClick={() => void removeEntry(`${base}/users/${profile.id}`, `Hapus akun ${profile.name}?`, "Akun akan dinonaktifkan dan sesi aktif dicabut.")}>Hapus akun</Button>
-                      : <form method="post" onSubmit={event => void submit(event, () => request(`${base}/users/${profile.id}/active`, { active: true }, "PUT"))}><Button size="sm" variant="outline" disabled={pending}>Aktifkan akun</Button></form>}
-                    {profile.membership ? <Button type="button" variant="outline" size="sm" className="text-destructive" disabled={pending}
-                      onClick={() => void removeEntry(`${endpoint}/users/${profile.id}`, `Hapus keanggotaan ${profile.name}?`, "Akses pengguna ke institusi ini akan dinonaktifkan.")}>Hapus keanggotaan</Button>
-                      : <form method="post" onSubmit={event => void submit(event, () => request(`${endpoint}/users/${profile.id}`, { active: true, roles: profile.roles }, "PUT"))}><Button size="sm" variant="outline" disabled={pending}>Aktifkan keanggotaan</Button></form>}
+                    {profile.active ? <Button data-action-tone="danger" type="button" variant="outline" size="sm" className="text-destructive" disabled={pending}
+                      onClick={() => void removeEntry(`${base}/users/${profile.id}`, `Hapus akun ${profile.name}?`, "Akun akan dinonaktifkan dan sesi aktif dicabut.")}><Trash2 size={15} aria-hidden="true" /> Hapus akun</Button>
+                      : <form method="post" onSubmit={event => void submit(event, () => request(`${base}/users/${profile.id}/active`, { active: true }, "PUT"))}><Button data-action-tone="positive" size="sm" variant="outline" disabled={pending}><UserCheck size={15} aria-hidden="true" /> Aktifkan akun</Button></form>}
+                    {profile.membership ? <Button data-action-tone="danger" type="button" variant="outline" size="sm" className="text-destructive" disabled={pending}
+                      onClick={() => void removeEntry(`${endpoint}/users/${profile.id}`, `Hapus keanggotaan ${profile.name}?`, "Akses pengguna ke institusi ini akan dinonaktifkan.")}><Trash2 size={15} aria-hidden="true" /> Hapus keanggotaan</Button>
+                      : <form method="post" onSubmit={event => void submit(event, () => request(`${endpoint}/users/${profile.id}`, { active: true, roles: profile.roles }, "PUT"))}><Button data-action-tone="positive" size="sm" variant="outline" disabled={pending}><UserCheck size={15} aria-hidden="true" /> Aktifkan keanggotaan</Button></form>}
                     <form method="post" onSubmit={event => void submit(event, () => request(`${base}/users/${profile.id}/superadmin`, { granted: !profile.superadmin }, "PUT"))}>
-                      <Button variant="outline" size="sm" disabled={pending}>{profile.superadmin ? "Cabut akses Superadmin" : "Jadikan Superadmin"}</Button>
+                      <Button data-action-tone="edit" variant="outline" size="sm" disabled={pending}><ShieldCheck size={15} aria-hidden="true" /> {profile.superadmin ? "Cabut akses Superadmin" : "Jadikan Superadmin"}</Button>
                     </form>
                   </div>
                 </CardContent>
@@ -425,15 +425,15 @@ export function AccessPanel({ section }: { section: "access" | "institutions" | 
             </CardContent>
           </Card>
           <details className="rounded-md border border-border bg-card px-3 py-2.5">
-            <summary className="cursor-pointer text-sm font-semibold">Atur paket izin (role)</summary>
+            <summary className="cursor-pointer text-sm font-semibold"><Settings2 size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" /> Atur paket izin (role)</summary>
             <div className="workspace-fields mt-3 space-y-3">
               {system && [undefined, ...workspace.roles.filter(role => showInactive || role.active)].map(role => (
                 <form key={role?.id ?? "new"} method="post" onSubmit={event => void submit(event, data => request(endpoint + "/roles" + (role ? `/${role.id}` : ""), { name: data.get("name"), active: data.has("active"), permissions: data.getAll("permission") }, role ? "PUT" : "POST"), !role)} className="flex flex-wrap items-end gap-3 border-b border-border pb-4 text-sm">
                   <Input id={`role-${role?.id ?? "new"}`} label={role ? "Nama role" : "Nama role baru"} name="name" defaultValue={role?.name} required maxLength={64} />
                   <label><input type="checkbox" name="active" defaultChecked={role?.active ?? true} /> Aktif</label>
                   {workspace.permissions.map(permission => <label key={permission} className="flex items-center gap-1.5"><input type="checkbox" name="permission" value={permission} defaultChecked={role?.permissions.includes(permission)} /> {menuPermissions[permission] ?? permission}</label>)}
-                  <Button disabled={pending}>{role ? "Simpan role" : "Tambah role"}</Button>
-                  {role?.active && <Button type="button" variant="outline" className="text-destructive" disabled={pending} onClick={() => void removeEntry(`${endpoint}/roles/${role.id}`, `Hapus role ${role.name}?`, "Role dan izin yang diberikan lewat role ini akan dinonaktifkan. Riwayat penetapannya tetap tersimpan.")}>
+                  <Button data-action-tone="positive" disabled={pending}>{role ? <Save size={15} aria-hidden="true" /> : <Plus size={15} aria-hidden="true" />} {role ? "Simpan role" : "Tambah role"}</Button>
+                  {role?.active && <Button data-action-tone="danger" type="button" variant="outline" className="text-destructive" disabled={pending} onClick={() => void removeEntry(`${endpoint}/roles/${role.id}`, `Hapus role ${role.name}?`, "Role dan izin yang diberikan lewat role ini akan dinonaktifkan. Riwayat penetapannya tetap tersimpan.")}>
                     <Trash2 size={15} aria-hidden="true" /> Hapus role
                   </Button>}
                 </form>

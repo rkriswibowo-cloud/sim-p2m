@@ -1,5 +1,6 @@
 "use client";
 
+import { CircleCheck, CircleX, Eye, Plus, Save, Send, ShieldCheck, Trash2, Upload } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -183,7 +184,7 @@ export function MonevPanel() {
               <button key={p.proposalId} type="button" onClick={() => setSelected(p)}
                 className={`w-full rounded-md border p-3 text-left text-sm transition ${selected?.proposalId === p.proposalId ? "border-brand bg-accent/40" : "border-border hover:bg-muted/40"}`}>
                 <div className="flex items-start justify-between gap-2">
-                  <p className="font-semibold line-clamp-2">{p.title}</p>
+                  <p className="font-semibold line-clamp-2"><Eye size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" /> {p.title}</p>
                   <span className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium ${p.projectStatus === "completed" ? "bg-emerald-500/15 text-emerald-600" : "bg-muted"}`}>
                     {p.projectStatus === "completed" ? "Selesai" : p.projectStatus === "active" ? "Aktif" : "Belum Kontrak"}
                   </span>
@@ -214,21 +215,22 @@ export function MonevPanel() {
                       <p>Laporan Kemajuan: <strong>{selected.hasProgress ? "Sudah diisi" : "Belum"}</strong> · Laporan Akhir: <strong>{selected.hasFinal ? "Sudah diisi" : "Belum"}</strong> · Poster: <strong>{selected.hasPoster ? "Terunggah" : "Belum"}</strong></p>
                     </div>
                     {canClose && !readOnly && selected.projectStatus === "active" && (
-                      <Button size="sm" disabled={pending} onClick={() => void run(async () => {
+                      <Button data-action-tone="positive" size="sm" disabled={pending} onClick={() => void run(async () => {
                         await api(`${base}/institutions/${tenant}/monev/proposals/${selected.proposalId}/close`, { method: "POST" });
                         toast.success("Proyek resmi ditutup (Selesai).", workspaceToastOptions);
-                      })}>Tutup Proyek (Selesai)</Button>
+                      })}><CircleCheck size={15} aria-hidden="true" /> Tutup Proyek (Selesai)</Button>
                     )}
                   </div>
                   <div className="flex flex-wrap items-center gap-3 border-t border-border pt-2">
                     {selected.hasPoster && (
                       <a target="_blank" rel="noopener" href={`${base}/institutions/${tenant}/research/${selected.proposalId}/images/poster`} className="text-brand underline font-medium">
+                        <Eye size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" />
                         Lihat Poster Penelitian
                       </a>
                     )}
                     {isOwner && !readOnly && selected.projectStatus !== "completed" && (
                       <label className="inline-flex items-center gap-2">
-                        <span>Unggah Poster (JPG/PNG, maks. 2 MB):</span>
+                        <span><Upload size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" /> Unggah Poster (JPG/PNG, maks. 2 MB):</span>
                         <input type="file" accept="image/png,image/jpeg" disabled={pending}
                           onChange={(e) => { uploadPoster(selected.proposalId, e.target.files?.[0]); e.target.value = ""; }} />
                       </label>
@@ -252,11 +254,11 @@ export function MonevPanel() {
                       {mv.followUpStatus === "pending" && isOwner && !readOnly && (
                         <div className="flex flex-wrap gap-2 pt-1">
                           <Input id={`fu-${mv.id}`} label="Keterangan Tindak Lanjut" value={followUpNote} onChange={(e) => setFollowUpNote(e.target.value)} />
-                          <Button size="sm" className="self-end" disabled={pending} onClick={() => void run(async () => {
+                          <Button data-action-tone="positive" size="sm" className="self-end" disabled={pending} onClick={() => void run(async () => {
                             await api(`${base}/institutions/${tenant}/monev/reviews/${mv.id}/follow-up`, json("POST", { note: followUpNote }));
                             setFollowUpNote("");
                             toast.success("Tindak lanjut dikirim.", workspaceToastOptions);
-                          })}>Kirim Tindak Lanjut</Button>
+                          })}><Send size={15} aria-hidden="true" /> Kirim Tindak Lanjut</Button>
                         </div>
                       )}
                     </div>
@@ -280,13 +282,13 @@ export function MonevPanel() {
                       </div>
                       <Input id="mv-notes" label="Catatan Monev" value={notes} onChange={(e) => setNotes(e.target.value)} />
                       <Input id="mv-corr" label="Tindakan Korektif (opsional)" value={corrective} onChange={(e) => setCorrective(e.target.value)} />
-                      <Button size="sm" className="self-end" disabled={pending} onClick={() => void run(async () => {
+                      <Button data-action-tone="positive" size="sm" className="self-end" disabled={pending} onClick={() => void run(async () => {
                         await api(`${base}/institutions/${tenant}/monev/proposals/${selected.proposalId}`, json("POST", {
                           stage, score: Number(score), decision, notes, correctiveAction: corrective,
                         }));
                         setNotes(""); setCorrective("");
                         toast.success("Hasil monev disimpan.", workspaceToastOptions);
-                      })}>Simpan Monev</Button>
+                      })}><Save size={15} aria-hidden="true" /> Simpan Monev</Button>
                     </div>
                   )}
                 </div>
@@ -305,10 +307,10 @@ export function MonevPanel() {
                         {ex.justification && <p className="text-muted-foreground">{ex.justification}</p>}
                       </div>
                       {isOwner && !readOnly && selected.projectStatus !== "completed" && (
-                        <Button size="sm" variant="ghost" className="h-6 px-2 text-destructive" disabled={pending} onClick={() => void run(async () => {
+                        <Button data-action-tone="danger" size="sm" variant="ghost" className="h-6 px-2 text-destructive" disabled={pending} onClick={() => void run(async () => {
                           await api(`${base}/institutions/${tenant}/monev/expenses/${ex.id}`, { method: "DELETE" });
                           toast.success("Item pengeluaran dihapus.", workspaceToastOptions);
-                        })}>Hapus</Button>
+                        })}><Trash2 size={15} aria-hidden="true" /> Hapus</Button>
                       )}
                     </div>
                   ))}
@@ -321,13 +323,13 @@ export function MonevPanel() {
                       <Input id="ex-unit" label="Satuan" value={expUnit} onChange={(e) => setExpUnit(e.target.value)} />
                       <Input id="ex-price" label="Harga Satuan (Rp)" type="number" value={expPrice} onChange={(e) => setExpPrice(e.target.value)} />
                       <Input id="ex-date" label="Tanggal Belanja" type="date" value={expDate} onChange={(e) => setExpDate(e.target.value)} />
-                      <Button size="sm" className="self-end" disabled={pending} onClick={() => void run(async () => {
+                      <Button data-action-tone="positive" size="sm" className="self-end" disabled={pending} onClick={() => void run(async () => {
                         await api(`${base}/institutions/${tenant}/monev/proposals/${selected.proposalId}/expenses`, json("POST", {
                           category: expCat, itemName: expItem, justification: expJust, quantity: expQty, unit: expUnit, unitPrice: expPrice, spentAt: expDate,
                         }));
                         setExpItem(""); setExpJust(""); setExpPrice("");
                         toast.success("Pengeluaran aktual ditambahkan.", workspaceToastOptions);
-                      })}>Tambah Pengeluaran</Button>
+                      })}><Plus size={15} aria-hidden="true" /> Tambah Pengeluaran</Button>
                     </div>
                   )}
                 </div>
@@ -348,10 +350,10 @@ export function MonevPanel() {
                         </span>
                       </div>
                       <div className="flex flex-wrap items-center gap-3">
-                        {out.hasProof && <a target="_blank" rel="noopener" href={`${base}/institutions/${tenant}/monev/outputs/${out.id}/proof`} className="text-brand underline">Lihat Bukti Luaran</a>}
+                        {out.hasProof && <a target="_blank" rel="noopener" href={`${base}/institutions/${tenant}/monev/outputs/${out.id}/proof`} className="text-brand underline"><Eye size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" /> Lihat Bukti Luaran</a>}
                         {isOwner && !readOnly && selected.projectStatus !== "completed" && (
                           <label className="inline-flex items-center gap-1.5">
-                            <span>Unggah Bukti (PDF/JPG/PNG):</span>
+                            <span><Upload size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" /> Unggah Bukti (PDF/JPG/PNG):</span>
                             <input type="file" accept="application/pdf,image/png,image/jpeg" disabled={pending}
                               onChange={(e) => { uploadOutputProof(out.id, e.target.files?.[0]); e.target.value = ""; }} />
                           </label>
@@ -359,14 +361,14 @@ export function MonevPanel() {
                       </div>
                       {canVerify && !readOnly && (
                         <div className="flex flex-wrap gap-2 border-t border-border pt-1.5">
-                          <Button size="sm" variant="outline" disabled={pending} onClick={() => void run(async () => {
+                          <Button data-action-tone="edit" size="sm" variant="outline" disabled={pending} onClick={() => void run(async () => {
                             await api(`${base}/institutions/${tenant}/monev/outputs/${out.id}/verify`, json("POST", { status: "verified", note: "Luaran sesuai bukti" }));
                             toast.success("Luaran diverifikasi.", workspaceToastOptions);
-                          })}>Verifikasi Luaran</Button>
-                          <Button size="sm" variant="destructive" disabled={pending} onClick={() => void run(async () => {
+                          })}><ShieldCheck size={15} aria-hidden="true" /> Verifikasi Luaran</Button>
+                          <Button data-action-tone="danger" size="sm" variant="destructive" disabled={pending} onClick={() => void run(async () => {
                             await api(`${base}/institutions/${tenant}/monev/outputs/${out.id}/verify`, json("POST", { status: "rejected", note: "Bukti luaran perlu dilengkapi" }));
                             toast.success("Verifikasi luaran ditolak.", workspaceToastOptions);
-                          })}>Tolak Bukti</Button>
+                          })}><CircleX size={15} aria-hidden="true" /> Tolak Bukti</Button>
                         </div>
                       )}
                     </div>
@@ -388,14 +390,14 @@ export function MonevPanel() {
                         </select>
                       </div>
                       <Input id="out-url" label="Tautan URL (opsional)" value={outUrl} onChange={(e) => setOutUrl(e.target.value)} />
-                      <Button size="sm" className="self-end" disabled={pending} onClick={() => void run(async () => {
+                      <Button data-action-tone="positive" size="sm" className="self-end" disabled={pending} onClick={() => void run(async () => {
                         await api(`${base}/institutions/${tenant}/monev/proposals/${selected.proposalId}/outputs`, json("POST", {
                           kind: outKind, title: outTitle, publicationName: outPub, identifier: outId,
                           outputYear: Number(outYear), status: outStatus, url: outUrl,
                         }));
                         setOutTitle(""); setOutPub(""); setOutId(""); setOutUrl("");
                         toast.success("Capaian luaran disimpan.", workspaceToastOptions);
-                      })}>Tambah Capaian Luaran</Button>
+                      })}><Plus size={15} aria-hidden="true" /> Tambah Capaian Luaran</Button>
                     </div>
                   )}
                 </div>

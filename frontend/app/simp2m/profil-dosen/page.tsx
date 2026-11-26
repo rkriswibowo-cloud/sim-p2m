@@ -22,7 +22,7 @@ export default async function LecturerProfilePage() {
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">
-          Akun Anda belum terhubung ke institusi aktif mana pun. Hubungi admin institusi untuk menghubungkan akun Anda.
+          Akun Anda belum memiliki institusi aktif. Hubungi admin untuk memeriksa data akun Anda.
         </p>
       )}
     </section>

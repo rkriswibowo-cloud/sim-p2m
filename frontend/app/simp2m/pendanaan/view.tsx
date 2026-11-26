@@ -1,5 +1,6 @@
 "use client";
 
+import { CircleCheck, CircleX, Download, Eye, FilePlus, Plus, Save, ShieldCheck, Upload } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -204,11 +205,11 @@ export function FundingPanel() {
                       <p className="font-semibold">#{r.proposalId} · {r.title}</p>
                       <p className="text-xs text-muted-foreground">{r.owner} · {r.scheme} · Disetujui {money.format(BigInt(r.approvedBudget))}</p>
                     </div>
-                    <Button size="sm" disabled={pending} onClick={() => void run(async () => {
+                    <Button data-action-tone="positive" size="sm" disabled={pending} onClick={() => void run(async () => {
                       await api(`${base}/institutions/${tenant}/projects/convert/${r.proposalId}`, json("POST", { contractNumber: contractNo, contractDate }));
                       setContractNo("");
                       toast.success("Kontrak proyek berhasil dibuat.", workspaceToastOptions);
-                    })}>Terbitkan Kontrak</Button>
+                    })}><FilePlus size={15} aria-hidden="true" /> Terbitkan Kontrak</Button>
                   </div>
                 ))}
               </CardContent>
@@ -223,7 +224,7 @@ export function FundingPanel() {
                 {projects.map((p) => (
                   <button key={p.id} type="button" onClick={() => { setSelected(p); setAmendBudget(p.approvedBudget); }}
                     className={`w-full rounded-md border p-3 text-left text-sm transition ${selected?.id === p.id ? "border-brand bg-accent/40" : "border-border hover:bg-muted/40"}`}>
-                    <p className="font-semibold">{p.contractNumber}</p>
+                    <p className="font-semibold"><Eye size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" /> {p.contractNumber}</p>
                     <p className="line-clamp-1 text-xs">{p.title}</p>
                     <p className="mt-1 text-xs text-muted-foreground">{p.owner} · {p.scheme}</p>
                     <p className="mt-1 text-xs">Kontrak: <strong>{money.format(BigInt(p.approvedBudget))}</strong> · Cair: <strong>{money.format(BigInt(p.totalDisbursed))}</strong></p>
@@ -244,8 +245,9 @@ export function FundingPanel() {
                       <p className="text-muted-foreground">Ketua: {selected.owner} · Tanggal Kontrak: {selected.contractDate}</p>
                       <p>Nilai Kontrak: <strong>{money.format(BigInt(selected.approvedBudget))}</strong> · Total Dicairkan: <strong>{money.format(BigInt(selected.totalDisbursed))}</strong></p>
                       <div className="pt-2">
-                        <a href={`${base}/institutions/${tenant}/projects/${selected.id}/contract-docx`}
+                        <a data-action-tone="info" href={`${base}/institutions/${tenant}/projects/${selected.id}/contract-docx`}
                           className="inline-flex items-center rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent">
+                          <Download size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" />
                           Unduh Surat Kontrak (.docx)
                         </a>
                       </div>
@@ -254,7 +256,7 @@ export function FundingPanel() {
                     {/* Termin Pencairan */}
                     <div className="rounded-md border border-border p-3 space-y-2">
                       <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Termin &amp; Pencairan Dana</h4>
-                      {selected.progressUploaded ? <a className="text-xs text-brand underline" href={`${base}/institutions/${tenant}/reports/${selected.proposalId}/progress-file`}>Unduh Laporan Kemajuan</a> :
+                      {selected.progressUploaded ? <a className="text-xs text-brand underline" href={`${base}/institutions/${tenant}/reports/${selected.proposalId}/progress-file`}><Download size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" /> Unduh Laporan Kemajuan</a> :
                         <p className="text-xs text-muted-foreground">Pencairan di atas 75% terkunci hingga PDF Laporan Kemajuan diunggah.</p>}
                       {!selected.disbursements.length && <p className="text-xs text-muted-foreground">Belum ada termin pencairan.</p>}
                       {selected.disbursements.map((d) => (
@@ -268,6 +270,7 @@ export function FundingPanel() {
                           {d.referenceNo && <p className="text-muted-foreground">No. Referensi / SP2D: {d.referenceNo}</p>}
                           {d.hasProof && (
                             <a target="_blank" rel="noopener" href={`${base}/institutions/${tenant}/disbursements/${d.id}/proof`} className="text-brand underline">
+                              <Eye size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" />
                               Lihat Bukti Transfer
                             </a>
                           )}
@@ -277,7 +280,7 @@ export function FundingPanel() {
                               <Input id={`tr-date-${d.id}`} label="Tanggal Transfer" type="date" value={transferDate} onChange={(e) => setTransferDate(e.target.value)} />
                               <Input id={`tr-ref-${d.id}`} label="No. Referensi" placeholder="SP2D/TRF-001" value={transferRef} onChange={(e) => setTransferRef(e.target.value)} />
                               <label className="block text-xs">
-                                <span className="mb-1 block">Bukti &amp; Tandai Cair (PDF/JPG/PNG)</span>
+                                <span className="mb-1 block"><Upload size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" /> Bukti &amp; Tandai Cair (PDF/JPG/PNG)</span>
                                 <input type="file" accept="application/pdf,image/png,image/jpeg" disabled={pending}
                                   onChange={(e) => { transferDisbursement(d.id, e.target.files?.[0]); e.target.value = ""; }} />
                               </label>
@@ -292,11 +295,11 @@ export function FundingPanel() {
                           <Input id="disb-amt" label="Nominal (Rp)" type="number" value={termAmount} onChange={(e) => setTermAmount(e.target.value)} />
                           <div className="flex gap-2">
                             <Input id="disb-note" label="Catatan" value={termNote} onChange={(e) => setTermNote(e.target.value)} />
-                            <Button size="sm" className="self-end" disabled={pending} onClick={() => void run(async () => {
+                            <Button data-action-tone="positive" size="sm" className="self-end" disabled={pending} onClick={() => void run(async () => {
                               await api(`${base}/institutions/${tenant}/projects/${selected.id}/disbursements`, json("POST", { termName, amount: termAmount, note: termNote }));
                               setTermName(""); setTermAmount(""); setTermNote("");
                               toast.success("Termin pencairan ditambahkan.", workspaceToastOptions);
-                            })}>Tambah</Button>
+                            })}><Plus size={15} aria-hidden="true" /> Tambah</Button>
                           </div>
                         </div>
                       )}
@@ -318,13 +321,13 @@ export function FundingPanel() {
                           <Input id="am-date" label="Tanggal Adendum" type="date" value={amendDate} onChange={(e) => setAmendDate(e.target.value)} />
                           <Input id="am-bud" label="Nilai Anggaran Baru (Rp)" type="number" value={amendBudget} onChange={(e) => setAmendBudget(e.target.value)} />
                           <Input id="am-rsn" label="Alasan Amandemen" value={amendReason} onChange={(e) => setAmendReason(e.target.value)} />
-                          <Button size="sm" className="sm:col-span-2 justify-self-start" disabled={pending} onClick={() => void run(async () => {
+                          <Button data-action-tone="positive" size="sm" className="sm:col-span-2 justify-self-start" disabled={pending} onClick={() => void run(async () => {
                             await api(`${base}/institutions/${tenant}/projects/${selected.id}/amendments`, json("POST", {
                               number: amendNo, date: amendDate, newBudget: amendBudget, reason: amendReason,
                             }));
                             setAmendNo(""); setAmendReason("");
                             toast.success("Amandemen kontrak disimpan.", workspaceToastOptions);
-                          })}>Simpan Amandemen</Button>
+                          })}><Save size={15} aria-hidden="true" /> Simpan Amandemen</Button>
                         </div>
                       )}
                     </div>
@@ -351,7 +354,7 @@ export function FundingPanel() {
                   <Input id="ext-app" label="Nominal Disetujui (opsional)" type="number" value={extApproved} onChange={(e) => setExtApproved(e.target.value)} />
                   <Input id="ext-cnt" label="No. Kontrak Eksternal (opsional)" value={extContract} onChange={(e) => setExtContract(e.target.value)} />
                 </div>
-                <Button size="sm" disabled={pending} onClick={() => void run(async () => {
+                <Button data-action-tone="positive" size="sm" disabled={pending} onClick={() => void run(async () => {
                   await api(`${base}/institutions/${tenant}/external-fundings`, json("POST", {
                     title: extTitle, funderName: extFunder, schemeName: extScheme,
                     fiscalYear: Number(extYear), proposedBudget: extProposed,
@@ -359,7 +362,7 @@ export function FundingPanel() {
                   }));
                   setExtTitle(""); setExtFunder(""); setExtScheme(""); setExtProposed(""); setExtApproved(""); setExtContract("");
                   toast.success("Registrasi pendanaan eksternal disimpan.", workspaceToastOptions);
-                })}>Daftarkan Pendanaan Eksternal</Button>
+                })}><Plus size={15} aria-hidden="true" /> Daftarkan Pendanaan Eksternal</Button>
               </CardContent>
             </Card>
           )}
@@ -379,10 +382,10 @@ export function FundingPanel() {
                     <span className="rounded bg-muted px-2 py-0.5 text-xs font-medium uppercase">{e.status}</span>
                   </div>
                   <div className="flex flex-wrap items-center gap-3 text-xs">
-                    {e.hasProof && <a target="_blank" rel="noopener" href={`${base}/institutions/${tenant}/external-fundings/${e.id}/proof`} className="text-brand underline">Lihat Bukti Pengajuan/SK</a>}
+                    {e.hasProof && <a target="_blank" rel="noopener" href={`${base}/institutions/${tenant}/external-fundings/${e.id}/proof`} className="text-brand underline"><Eye size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" /> Lihat Bukti Pengajuan/SK</a>}
                     {!readOnly && (
                       <label className="inline-flex items-center gap-1.5">
-                        <span>Unggah Bukti (PDF/JPG/PNG):</span>
+                        <span><Upload size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" /> Unggah Bukti (PDF/JPG/PNG):</span>
                         <input type="file" accept="application/pdf,image/png,image/jpeg" disabled={pending}
                           onChange={(ev) => { uploadExternalProof(e.id, ev.target.files?.[0]); ev.target.value = ""; }} />
                       </label>
@@ -390,18 +393,18 @@ export function FundingPanel() {
                   </div>
                   {canVerify && !readOnly && (
                     <div className="flex flex-wrap gap-2 border-t border-border pt-2">
-                      <Button size="sm" variant="outline" disabled={pending} onClick={() => void run(async () => {
+                      <Button data-action-tone="edit" size="sm" variant="outline" disabled={pending} onClick={() => void run(async () => {
                         await api(`${base}/institutions/${tenant}/external-fundings/${e.id}/verify`, json("POST", { status: "verified", note: "Terverifikasi LPPM" }));
                         toast.success("Registrasi diverifikasi.", workspaceToastOptions);
-                      })}>Verifikasi</Button>
-                      <Button size="sm" disabled={pending} onClick={() => void run(async () => {
+                      })}><ShieldCheck size={15} aria-hidden="true" /> Verifikasi</Button>
+                      <Button data-action-tone="positive" size="sm" disabled={pending} onClick={() => void run(async () => {
                         await api(`${base}/institutions/${tenant}/external-fundings/${e.id}/verify`, json("POST", { status: "funded", note: "Tercatat Didanai Eksternal" }));
                         toast.success("Status ditetapkan Didanai Eksternal.", workspaceToastOptions);
-                      })}>Tandai Didanai</Button>
-                      <Button size="sm" variant="destructive" disabled={pending} onClick={() => void run(async () => {
+                      })}><CircleCheck size={15} aria-hidden="true" /> Tandai Didanai</Button>
+                      <Button data-action-tone="danger" size="sm" variant="destructive" disabled={pending} onClick={() => void run(async () => {
                         await api(`${base}/institutions/${tenant}/external-fundings/${e.id}/verify`, json("POST", { status: "rejected", note: "Bukti belum valid" }));
                         toast.success("Registrasi ditolak.", workspaceToastOptions);
-                      })}>Tolak</Button>
+                      })}><CircleX size={15} aria-hidden="true" /> Tolak</Button>
                     </div>
                   )}
                 </div>

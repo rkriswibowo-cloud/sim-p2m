@@ -629,45 +629,54 @@ export function PrintPreviewModal({
                     <p className="text-center font-bold uppercase">RENCANA JADWAL PELAKSANAAN KEGIATAN</p>
                     {(() => {
                       const maxMonth = Math.max(8, ...(d.schedule ?? []).map(s => Number(s.to) || 0));
-                      const months = Array.from({ length: maxMonth }, (_, i) => i + 1);
-                      return (
-                        <table className="w-full border-collapse border border-black text-xs">
-                          <thead>
-                            <tr>
-                              <th rowSpan={2} className="w-8 border border-black px-1.5 py-1 text-center">No</th>
-                              <th rowSpan={2} className="border border-black px-2 py-1 text-center">Nama Kegiatan</th>
-                              <th colSpan={months.length} className="border border-black px-2 py-1 text-center">Bulan</th>
-                            </tr>
-                            <tr>
-                              {months.map(m => (
-                                <th key={m} className="w-6 border border-black px-1 py-0.5 text-center">{m}</th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {!d.schedule?.length ? (
-                              <tr><td colSpan={2 + months.length} className="border border-black px-2 py-1 text-center">–</td></tr>
-                            ) : d.schedule.map((row, idx) => {
-                              const from = Number(row.from) || 0;
-                              const to = Number(row.to) || 0;
-                              return (
-                                <tr key={idx}>
-                                  <td className="border border-black px-1.5 py-1 text-center">{idx + 1}</td>
-                                  <td className="border border-black px-2 py-1">{row.name || "–"}</td>
-                                  {months.map(m => {
-                                    const active = from > 0 && to >= from && m >= from && m <= to;
-                                    return (
-                                      <td key={m} className={`border border-black px-1 py-1 text-center ${active ? "bg-slate-700 text-white font-bold" : ""}`}>
-                                        {active ? "✓" : ""}
-                                      </td>
-                                    );
-                                  })}
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      );
+                      const monthsPerTable = 12;
+                      return Array.from({ length: Math.ceil(maxMonth / monthsPerTable) }, (_, group) => {
+                        const start = group * monthsPerTable;
+                        const months = Array.from({ length: Math.min(monthsPerTable, maxMonth - start) }, (_, i) => start + i + 1);
+                        return (
+                          <table key={start} className="w-full border-collapse border border-black text-xs">
+                            <colgroup>
+                              <col className="w-8" />
+                              <col />
+                              {months.map(m => <col key={m} style={{ width: `${65 / months.length}%` }} />)}
+                            </colgroup>
+                            <thead>
+                              <tr>
+                                <th rowSpan={2} className="border border-black px-1.5 py-1 text-center">No</th>
+                                <th rowSpan={2} className="border border-black px-2 py-1 text-center">Nama Kegiatan</th>
+                                <th colSpan={months.length} className="border border-black px-2 py-1 text-center">Bulan</th>
+                              </tr>
+                              <tr>
+                                {months.map(m => (
+                                  <th key={m} className="proposal-schedule-month border border-black px-1 py-0.5 text-center">{m}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {!d.schedule?.length ? (
+                                <tr><td colSpan={2 + months.length} className="border border-black px-2 py-1 text-center">–</td></tr>
+                              ) : d.schedule.map((row, idx) => {
+                                const from = Number(row.from) || 0;
+                                const to = Number(row.to) || 0;
+                                return (
+                                  <tr key={idx}>
+                                    <td className="border border-black px-1.5 py-1 text-center">{idx + 1}</td>
+                                    <td className="border border-black px-2 py-1">{row.name || "–"}</td>
+                                    {months.map(m => {
+                                      const active = from > 0 && to >= from && m >= from && m <= to;
+                                      return (
+                                        <td key={m} className={`proposal-schedule-month border border-black px-1 py-1 text-center ${active ? "bg-slate-700 text-white font-bold" : ""}`}>
+                                          {active ? "✓" : ""}
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        );
+                      });
                     })()}
                   </div>
 

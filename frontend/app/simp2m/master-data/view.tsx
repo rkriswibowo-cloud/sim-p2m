@@ -1,10 +1,11 @@
 "use client";
 
 import { LecturerAccountsPanel } from "./lecturer-accounts";
+import { jafungOptions } from "../pengaturan/lecturer-profile";
 
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { Trash2 } from "lucide-react";
+import { Pencil, Plus, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,7 +38,7 @@ const officialPositionLabels: Record<string, string> = {
 type Kind = keyof typeof datasets;
 type Dataset = { name: string; parent?: string; relation?: string; required?: boolean; contact?: boolean; phone?: boolean; program?: boolean; position?: boolean; codeLabel?: string };
 type Institution = { id: number; name: string; canMasterRead: boolean; canMasterManage: boolean };
-type Row = { id: number; code: string; name: string; active: boolean; parentId: number | null; parentName: string; email: string; phone?: string; program?: string; position?: string };
+type Row = { id: number; code: string; name: string; active: boolean; parentId: number | null; parentName: string; email: string; phone?: string; nuptk?: string; jafung?: string; program?: string; position?: string };
 type Rows = { items: Row[]; next: number };
 type Mode = "production" | "trial-admin" | "trial-reader";
 
@@ -48,7 +49,10 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error("Sesi berakhir.");
   }
   if (response.status === 403) throw new Error("Akun atau peran ini tidak memiliki izin.");
-  if (response.status === 400) throw new Error("Periksa kode, nama, dan relasi yang dipilih.");
+  if (response.status === 400) {
+    const body = await response.json().catch(() => null) as { message?: string } | null;
+    throw new Error(body?.message ?? "Periksa kode, nama, dan relasi yang dipilih.");
+  }
   if (response.status === 409) throw new Error("Kode ini sudah digunakan di institusi tersebut.");
   if (!response.ok) throw new Error("Master data belum dapat dimuat atau disimpan.");
   return response.json();
@@ -182,6 +186,7 @@ export function MasterDataPanel({ initialKind }: { initialKind?: string }) {
           code: fields.get("code"), name: fields.get("name"), active: fields.has("active"),
           email: fields.get("email") || "", parentId: parent ? Number(parent) : null,
           ...(dataset.phone ? { phone: fields.get("phone") || "" } : {}),
+          ...(kind === "lecturers" ? { nuptk: fields.get("nuptk"), jafung: fields.get("jafung") } : {}),
           ...(dataset.program ? { program: fields.get("program") || "research" } : {}),
           ...(dataset.position ? { position: fields.get("position") || "kaprodi" } : {}),
         }),
@@ -227,7 +232,7 @@ export function MasterDataPanel({ initialKind }: { initialKind?: string }) {
           <h1 className="text-2xl font-semibold tracking-tight">Master Data</h1>
           {mode !== "production" && <p className="mt-1 text-sm font-medium text-brand">Mode trial · database terpisah</p>}
         </div>
-        {selected?.canMasterManage && !accountsView && !adding && !edit && <Button onClick={() => { setOfficialPos("kaprodi"); setAdding(true); }} disabled={pending}>Tambah data</Button>}
+        {selected?.canMasterManage && !accountsView && !adding && !edit && <Button data-action-tone="positive" onClick={() => { setOfficialPos("kaprodi"); setAdding(true); }} disabled={pending}><Plus size={15} aria-hidden="true" /> Tambah data</Button>}
       </header>
       <div className="workspace-toolbar grid gap-2 sm:grid-cols-3">
         {system && <div>
@@ -261,8 +266,17 @@ export function MasterDataPanel({ initialKind }: { initialKind?: string }) {
           <form key={`${collection}/${kind}/${edit?.id ?? "new"}`} method="post" onSubmit={event => void save(event)} className="workspace-fields grid items-end gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <Input label={dataset.codeLabel ?? "Kode"} name="code" defaultValue={edit?.code} required maxLength={64} />
             <Input label="Nama" name="name" defaultValue={edit?.name} required maxLength={200} />
-            {dataset.contact && <Input label="Email" name="email" type="email" defaultValue={edit?.email} maxLength={254} />}
+            {dataset.contact && <Input label="Email" name="email" type="email" defaultValue={edit?.email} maxLength={254} hint={kind === "lecturers" ? "Email ini dipakai untuk membuat atau mencocokkan akun saat profil dosen pertama kali disiapkan." : undefined} />}
             {dataset.phone && <Input label="Nomor HP" name="phone" type="tel" defaultValue={edit?.phone} maxLength={32} placeholder="08xxxxxxxxxx" />}
+            {kind === "lecturers" && <>
+              <Input label="NUPTK" name="nuptk" defaultValue={edit?.nuptk} maxLength={64} />
+              <div>
+                <label htmlFor="master-jafung" className="block text-sm">Jabatan Fungsional</label>
+                <select id="master-jafung" name="jafung" defaultValue={edit?.jafung ?? ""} className="w-full rounded border border-input bg-card p-2">
+                  {jafungOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </div>
+            </>}
             {dataset.parent && <div>
               <label htmlFor="master-parent" className="block text-sm">{dataset.relation}</label>
               <select id="master-parent" name="parent" defaultValue={edit?.parentId ?? ""} required={dataset.required} className="w-full rounded border border-input bg-card p-2">
@@ -297,7 +311,7 @@ export function MasterDataPanel({ initialKind }: { initialKind?: string }) {
             <label className="flex min-h-8 items-center gap-2"><input type="checkbox" name="active" defaultChecked={edit?.active ?? true} /> Aktif</label>
             <div className="workspace-form-actions">
               <Button type="button" variant="outline" disabled={pending} onClick={() => { setEdit(undefined); setAdding(false); }}>Batal</Button>
-              <Button type="submit" disabled={pending}>Simpan</Button>
+              <Button data-action-tone="positive" type="submit" disabled={pending}><Save size={15} aria-hidden="true" /> Simpan</Button>
             </div>
           </form>
         </CardContent>
@@ -319,7 +333,7 @@ export function MasterDataPanel({ initialKind }: { initialKind?: string }) {
                 <option value="">Semua</option><option value="active">Aktif</option><option value="inactive">Nonaktif</option>
               </select>
             </div>
-            <Button variant="outline">Cari</Button>
+            <Button data-action-tone="info" variant="outline">Cari</Button>
           </form>
           {!result && !error && <p className="text-sm">Memuat data…</p>}
           {result?.items.length === 0 && <p className="text-sm">Tidak ada data yang cocok.</p>}
@@ -329,8 +343,8 @@ export function MasterDataPanel({ initialKind }: { initialKind?: string }) {
               <tbody>{result.items.map(row => <tr key={row.id}>
                 <td className="break-words">{row.code}</td><td className="break-words">{row.name}</td>{dataset.parent && <td>{row.parentName || "–"}</td>}{dataset.position && <><td>{officialPositionLabels[row.position ?? ""] ?? (row.position || "–")}</td><td>{row.parentName || "Institusi"}</td></>}{dataset.phone && <td className="break-words">{row.phone || "–"}</td>}{dataset.program && <td>{row.program === "community" ? "Pengabdian (PKM)" : "Penelitian"}</td>}<td><span className="workspace-status" data-active={row.active}>{row.active ? "Aktif" : "Nonaktif"}</span></td>
                 {selected?.canMasterManage && <td><div className="flex flex-wrap gap-1.5">
-                  <Button type="button" variant="outline" size="sm" aria-label={`Ubah ${row.name}`} disabled={pending} onClick={() => { setAdding(false); setOfficialPos(row.position || "kaprodi"); setEdit(row); }}>Ubah</Button>
-                  {row.active && <Button type="button" variant="ghost" size="icon-sm" className="text-destructive" title="Hapus" aria-label={`Hapus ${row.name}`} disabled={pending} onClick={() => void remove(row)}><Trash2 size={15} aria-hidden="true" /></Button>}
+                  <Button data-action-tone="edit" type="button" variant="outline" size="sm" aria-label={`Ubah ${row.name}`} disabled={pending} onClick={() => { setAdding(false); setOfficialPos(row.position || "kaprodi"); setEdit(row); }}><Pencil size={15} aria-hidden="true" /> Ubah</Button>
+                  {row.active && <Button data-action-tone="danger" type="button" variant="ghost" size="icon-sm" className="text-destructive" title="Hapus" aria-label={`Hapus ${row.name}`} disabled={pending} onClick={() => void remove(row)}><Trash2 size={15} aria-hidden="true" /></Button>}
                 </div></td>}
               </tr>)}</tbody>
             </table>
