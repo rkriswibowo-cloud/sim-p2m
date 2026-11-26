@@ -539,7 +539,11 @@ func (s service) exportProposalDocx(c *gin.Context, a actor) {
 		{"\n\n\n" + kaprodiName, "\n\n\n" + p.Owner},
 		{kaprodiNuptk, "NUPTK. " + meta.OwnerNuptk},
 	}, []int{4500, 4500}))
-	body.WriteString(docxTable([]string{"Mengetahui,\nDekan Fakultas " + meta.OwnerFaculty, "Disahkan,\nKetua LPPM"}, [][]string{
+	dekanTitle := "Dekan Fakultas " + meta.OwnerFaculty
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(meta.OwnerFaculty)), "fakultas") {
+		dekanTitle = "Dekan " + meta.OwnerFaculty
+	}
+	body.WriteString(docxTable([]string{"Mengetahui,\n" + dekanTitle, "Disahkan,\nKetua LPPM"}, [][]string{
 		{"\n\n\n" + dekanName, "\n\n\n" + lppmName},
 		{dekanNuptk, lppmNuptk},
 	}, []int{4500, 4500}))

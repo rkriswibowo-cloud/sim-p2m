@@ -40,11 +40,13 @@
     margin-block-start: 0;
   }
   .proposal-print-document .proposal-print-cover {
-    min-height: 245mm;
+    min-height: 230mm;
+    max-height: 234mm;
     padding: 0;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
+    break-inside: avoid;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }

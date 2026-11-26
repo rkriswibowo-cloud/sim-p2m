@@ -209,7 +209,7 @@ export function PrintPreviewModal({
           ) : (
             <div className="space-y-5">
               {/* Cover */}
-              <div className="proposal-print-cover flex min-h-[240mm] flex-col justify-between border-b border-slate-300 px-2 py-4 text-center print:border-0 print:py-0">
+              <div className="proposal-print-cover flex min-h-[230mm] flex-col justify-between border-b border-slate-300 px-2 py-4 text-center print:border-0 print:py-0">
                 <div className="flex items-center justify-center gap-6 pt-2">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src="/images/logo-uam.png" alt="Universitas Anwar Medika" className="h-20 w-auto object-contain sm:h-24" />
@@ -217,7 +217,7 @@ export function PrintPreviewModal({
                   <img src="/images/logo-diktisaintek.png" alt="Diktisaintek Berdampak" className="h-20 w-auto object-contain sm:h-24" />
                 </div>
 
-                <div className="space-y-4 py-8">
+                <div className="space-y-4 py-6">
                   <p className="text-xl font-bold uppercase tracking-wide">PROPOSAL PENELITIAN</p>
                   <h1 className="wrap-anywhere px-4 text-lg font-bold">{proposal.title || "[Judul Penelitian]"}</h1>
                   <p className="text-sm font-bold">
@@ -225,14 +225,14 @@ export function PrintPreviewModal({
                   </p>
                 </div>
 
-                <div className="space-y-1 pb-6 text-sm font-bold">
+                <div className="space-y-1 pb-4 text-sm font-bold">
                   <p>{proposal.ownerStudyProgram || "[Program Studi]"}</p>
                   <p>{proposal.ownerFaculty || "[Nama Fakultas]"}</p>
                   <p>{institutionName || "Universitas Anwar Medika"}</p>
                   <p>{proposal.proposalYear || new Date().getFullYear()}</p>
                 </div>
 
-                <div className="grid grid-cols-[44%_56%] overflow-hidden text-left">
+                <div className="grid break-inside-avoid grid-cols-[44%_56%] overflow-hidden text-left">
                   <div className="flex items-center bg-[#008000] px-5 py-4 text-white">
                     <span className="font-serif text-xl font-bold tracking-tight sm:text-2xl">www.uam.ac.id</span>
                   </div>
@@ -322,33 +322,49 @@ export function PrintPreviewModal({
                     Sidoarjo, {new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
                   </p>
                   <div className="mt-4 grid grid-cols-2 gap-x-10 gap-y-8">
-                    <div>
-                      <p>Menyetujui,</p>
-                      <p>Ketua Program Studi</p>
-                      <div className="h-16" />
-                      <p className="font-semibold">{proposal.officials?.kaprodi?.name || ""}</p>
-                      <p className="border-t border-dotted border-black pt-1">NUPTK. {proposal.officials?.kaprodi?.nuptk || ""}</p>
+                    <div className="flex min-h-[9.5rem] flex-col justify-between">
+                      <div>
+                        <p>Menyetujui,</p>
+                        <p>Ketua Program Studi</p>
+                      </div>
+                      <div>
+                        <p className="font-semibold">{proposal.officials?.kaprodi?.name || ""}</p>
+                        <p className="border-t border-dotted border-black pt-1">NUPTK. {proposal.officials?.kaprodi?.nuptk || ""}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p>&nbsp;</p>
-                      <p>Ketua Peneliti</p>
-                      <div className="h-16" />
-                      <p className="font-semibold">{proposal.owner}</p>
-                      <p className="border-t border-dotted border-black pt-1">NUPTK. {proposal.ownerNuptk || ""}</p>
+                    <div className="flex min-h-[9.5rem] flex-col justify-between">
+                      <div>
+                        <p>&nbsp;</p>
+                        <p>Ketua Peneliti</p>
+                      </div>
+                      <div>
+                        <p className="font-semibold">{proposal.owner}</p>
+                        <p className="border-t border-dotted border-black pt-1">NUPTK. {proposal.ownerNuptk || ""}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p>Mengetahui,</p>
-                      <p>Dekan Fakultas {proposal.ownerFaculty || "......"}</p>
-                      <div className="h-16" />
-                      <p className="font-semibold">{proposal.officials?.dekan?.name || ""}</p>
-                      <p className="border-t border-dotted border-black pt-1">NUPTK. {proposal.officials?.dekan?.nuptk || ""}</p>
+                    <div className="flex min-h-[9.5rem] flex-col justify-between">
+                      <div>
+                        <p>Mengetahui,</p>
+                        <p>
+                          {proposal.ownerFaculty
+                            ? (proposal.ownerFaculty.toLowerCase().startsWith("fakultas") ? `Dekan ${proposal.ownerFaculty}` : `Dekan Fakultas ${proposal.ownerFaculty}`)
+                            : "Dekan Fakultas ......"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="font-semibold">{proposal.officials?.dekan?.name || ""}</p>
+                        <p className="border-t border-dotted border-black pt-1">NUPTK. {proposal.officials?.dekan?.nuptk || ""}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p>Disahkan,</p>
-                      <p>Ketua LPPM</p>
-                      <div className="h-16" />
-                      <p className="font-semibold">{proposal.officials?.ketuaLppm?.name || ""}</p>
-                      <p className="border-t border-dotted border-black pt-1">NUPTK. {proposal.officials?.ketuaLppm?.nuptk || ""}</p>
+                    <div className="flex min-h-[9.5rem] flex-col justify-between">
+                      <div>
+                        <p>Disahkan,</p>
+                        <p>Ketua LPPM</p>
+                      </div>
+                      <div>
+                        <p className="font-semibold">{proposal.officials?.ketuaLppm?.name || ""}</p>
+                        <p className="border-t border-dotted border-black pt-1">NUPTK. {proposal.officials?.ketuaLppm?.nuptk || ""}</p>
+                      </div>
                     </div>
                   </div>
                   {proposal.officials?.rektor && (
