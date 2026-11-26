@@ -48,13 +48,28 @@ const money = new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR
 
 function costAmounts(quantity: string | number, price: string | number) {
   const match = /^(\d+)(?:\.(\d+))?$/.exec(String(quantity));
-  if (!match || !/^\d+$/.test(String(price))) return { unit: "–", subtotal: "–" };
+  if (!match || !/^\d+$/.test(String(price))) return { unit: "–", subtotal: "–", subtotalNum: BigInt(0) };
   const fraction = match[2] ?? "";
   const denominator = BigInt("1" + "0".repeat(fraction.length));
   const unit = BigInt(price);
   const subtotal = (BigInt(match[1] + fraction) * unit + denominator / BigInt(2)) / denominator;
-  return { unit: money.format(unit), subtotal: money.format(subtotal) };
+  return { unit: money.format(unit), subtotal: money.format(subtotal), subtotalNum: subtotal };
 }
+
+function rabGroupIndex(category: unknown): number {
+  const c = String(category ?? "").toLowerCase();
+  if (c.includes("habis") || c.includes("bahan")) return 0;
+  if (c.includes("penunjang") || c.includes("alat")) return 1;
+  if (c.includes("ganda")) return 2;
+  return 3;
+}
+
+const lampiranGroups = [
+  { heading: "I. Pembelian Bahan Habis Pakai", itemCol: "Jenis Peralatan", reasonCol: "Justifikasi Peralatan" },
+  { heading: "II. Peralatan Penunjang", itemCol: "Material", reasonCol: "Justifikasi Pembelian" },
+  { heading: "III. Penggandaan", itemCol: "Material", reasonCol: "Justifikasi Perjalanan" },
+  { heading: "IV. Lain-lain", itemCol: "Material", reasonCol: "Justifikasi Keperluan" },
+] as const;
 
 export function PrintPreviewModal({
   mode,
@@ -651,6 +666,87 @@ export function PrintPreviewModal({
                     {renderHtmlBlock(d.references)}
                   </div>
                 </div>
+              </div>
+
+              {/* Lampiran 1: Justifikasi Anggaran Penelitian */}
+              <div className="proposal-print-page-start space-y-4 text-xs">
+                <div>
+                  <h2 className="text-sm font-bold uppercase">LAMPIRAN</h2>
+                  <p className="mt-1 text-sm">
+                    <strong>Lampiran 1.</strong> Justifikasi Anggaran Penelitian
+                  </p>
+                </div>
+
+                {(() => {
+                  const costs = d.costs ?? [];
+                  const grouped: typeof costs[] = [[], [], [], []];
+                  for (const item of costs) {
+                    grouped[rabGroupIndex(item.category)].push(item);
+                  }
+                  let grandTotal = BigInt(0);
+                  for (const item of costs) {
+                    grandTotal += costAmounts(item.quantity ?? "", item.price ?? "").subtotalNum;
+                  }
+                  return (
+                    <>
+                      {lampiranGroups.map((grp, gIdx) => {
+                        const rows = grouped[gIdx];
+                        let groupSubtotal = BigInt(0);
+                        for (const item of rows) {
+                          groupSubtotal += costAmounts(item.quantity ?? "", item.price ?? "").subtotalNum;
+                        }
+                        return (
+                          <div key={grp.heading} className="space-y-1">
+                            <p className="font-bold">{grp.heading}</p>
+                            <table className="w-full border-collapse border border-black text-xs">
+                              <thead>
+                                <tr>
+                                  <th className="w-8 border border-black px-2 py-1 text-center">No</th>
+                                  <th className="border border-black px-2 py-1 text-center">{grp.itemCol}</th>
+                                  <th className="border border-black px-2 py-1 text-center">{grp.reasonCol}</th>
+                                  <th className="w-20 border border-black px-2 py-1 text-center">Kuantitas</th>
+                                  <th className="w-28 border border-black px-2 py-1 text-center">Harga Satuan (Rp)</th>
+                                  <th className="w-28 border border-black px-2 py-1 text-center">Biaya (Rp)</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {rows.length === 0 ? (
+                                  <tr>
+                                    <td className="border border-black px-2 py-1 text-center">-</td>
+                                    <td className="border border-black px-2 py-1">–</td>
+                                    <td className="border border-black px-2 py-1">–</td>
+                                    <td className="border border-black px-2 py-1 text-center">–</td>
+                                    <td className="border border-black px-2 py-1 text-right">–</td>
+                                    <td className="border border-black px-2 py-1 text-right">Rp 0</td>
+                                  </tr>
+                                ) : rows.map((c, rIdx) => {
+                                  const amount = costAmounts(c.quantity ?? "", c.price ?? "");
+                                  return (
+                                    <tr key={rIdx}>
+                                      <td className="border border-black px-2 py-1 text-center">{rIdx + 1}</td>
+                                      <td className="border border-black px-2 py-1">{String(c.item || "–")}</td>
+                                      <td className="border border-black px-2 py-1">{String(c.reason || "–")}</td>
+                                      <td className="border border-black px-2 py-1 text-center">{String(c.quantity || "0")} {String(c.unit || "")}</td>
+                                      <td className="border border-black px-2 py-1 text-right">{amount.unit}</td>
+                                      <td className="border border-black px-2 py-1 text-right">{amount.subtotal}</td>
+                                    </tr>
+                                  );
+                                })}
+                                <tr>
+                                  <td colSpan={5} className="border border-black px-2 py-1 text-center font-semibold">Subtotal (Rp)</td>
+                                  <td className="border border-black px-2 py-1 text-right font-semibold">{money.format(groupSubtotal)}</td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        );
+                      })}
+                      <p className="pt-2 text-right text-sm font-bold">
+                        TOTAL ANGGARAN KEGIATAN {money.format(grandTotal)}
+                      </p>
+                    </>
+                  );
+                })()}
               </div>
             </div>
           )}

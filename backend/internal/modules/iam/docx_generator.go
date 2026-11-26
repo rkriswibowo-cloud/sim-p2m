@@ -360,6 +360,17 @@ func formatRupiahID(amountStr string) string {
 	return "Rp " + string(out)
 }
 
+func calcSubtotalInt(qtyStr, priceStr string) *big.Int {
+	q, ok1 := new(big.Rat).SetString(qtyStr)
+	p, ok2 := new(big.Rat).SetString(priceStr)
+	if !ok1 || !ok2 {
+		return big.NewInt(0)
+	}
+	sub := new(big.Rat).Mul(q, p)
+	sub.Add(sub, big.NewRat(1, 2))
+	return new(big.Int).Quo(sub.Num(), sub.Denom())
+}
+
 func formatSubtotalRupiah(qtyStr, priceStr string) string {
 	q, ok1 := new(big.Rat).SetString(qtyStr)
 	p, ok2 := new(big.Rat).SetString(priceStr)
@@ -370,6 +381,20 @@ func formatSubtotalRupiah(qtyStr, priceStr string) string {
 	sub.Add(sub, big.NewRat(1, 2))
 	i := new(big.Int).Quo(sub.Num(), sub.Denom())
 	return formatRupiahID(i.String())
+}
+
+func rabGroupIndex(category string) int {
+	c := strings.ToLower(category)
+	switch {
+	case strings.Contains(c, "habis") || strings.Contains(c, "bahan"):
+		return 0
+	case strings.Contains(c, "penunjang") || strings.Contains(c, "alat"):
+		return 1
+	case strings.Contains(c, "ganda"):
+		return 2
+	default:
+		return 3
+	}
 }
 
 var nonSlugPattern = regexp.MustCompile(`[^a-zA-Z0-9_-]+`)
@@ -691,6 +716,50 @@ func (s service) exportProposalDocx(c *gin.Context, a actor) {
 		"Daftar pustaka disusun dan ditulis berdasarkan APA style sesuai dengan urutan pengutipan. Hanya pustaka yang disitasi pada usulan penelitian yang dicantumkan dalam Daftar Pustaka.",
 		docxRichParagraphs(d.References),
 	))
+
+	// Lampiran 1: Justifikasi Anggaran Penelitian
+	body.WriteString(docxHeading("LAMPIRAN", "left", true))
+	body.WriteString(docxParagraph("Lampiran 1. Justifikasi Anggaran Penelitian", true, 22, "left", 140))
+	lampGroups := []struct {
+		heading   string
+		itemCol   string
+		reasonCol string
+	}{
+		{"I. Pembelian Bahan Habis Pakai", "Jenis Peralatan", "Justifikasi Peralatan"},
+		{"II. Peralatan Penunjang", "Material", "Justifikasi Pembelian"},
+		{"III. Penggandaan", "Material", "Justifikasi Perjalanan"},
+		{"IV. Lain-lain", "Material", "Justifikasi Keperluan"},
+	}
+	groupedCosts := [4][]costInput{}
+	grandTotal := big.NewInt(0)
+	for _, cost := range d.Costs {
+		gIdx := rabGroupIndex(cost.Category)
+		groupedCosts[gIdx] = append(groupedCosts[gIdx], cost)
+		grandTotal.Add(grandTotal, calcSubtotalInt(cost.Quantity, cost.Price))
+	}
+	for gIdx, grp := range lampGroups {
+		body.WriteString(docxParagraph(grp.heading, true, 22, "left", 80))
+		rows := [][]string{}
+		groupSub := big.NewInt(0)
+		for rIdx, cost := range groupedCosts[gIdx] {
+			sub := calcSubtotalInt(cost.Quantity, cost.Price)
+			groupSub.Add(groupSub, sub)
+			rows = append(rows, []string{
+				strconv.Itoa(rIdx + 1),
+				cost.Item,
+				cost.Reason,
+				cost.Quantity + " " + cost.Unit,
+				formatRupiahID(cost.Price),
+				formatRupiahID(sub.String()),
+			})
+		}
+		if len(rows) == 0 {
+			rows = append(rows, []string{"-", "-", "-", "-", "-", "Rp 0"})
+		}
+		rows = append(rows, []string{"", "Subtotal (Rp)", "", "", "", formatRupiahID(groupSub.String())})
+		body.WriteString(docxTable([]string{"No", grp.itemCol, grp.reasonCol, "Kuantitas", "Harga Satuan (Rp)", "Biaya (Rp)"}, rows, []int{600, 1800, 2200, 1200, 1600, 1600}))
+	}
+	body.WriteString(docxParagraph("TOTAL ANGGARAN KEGIATAN "+formatRupiahID(grandTotal.String()), true, 22, "right", 160))
 
 	rawDocx, err := buildDocxBytes(body.String(), embedded...)
 	if err != nil {
