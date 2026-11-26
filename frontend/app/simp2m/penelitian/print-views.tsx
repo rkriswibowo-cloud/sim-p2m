@@ -330,16 +330,90 @@ export function PrintPreviewModal({
                 </div>
               </section>
 
-              <section className="proposal-print-page-start space-y-2">
-                <h2 className="text-base font-bold uppercase">Identitas dan Uraian Umum</h2>
-                <table className="w-full border-collapse border border-black text-xs">
-                  <tbody>
-                    <tr><td className="border border-black px-2 py-1 font-semibold w-44">Bidang Riset</td><td className="border border-black px-2 py-1">{fieldName}</td></tr>
-                    <tr><td className="border border-black px-2 py-1 font-semibold">Objek &amp; Lokasi</td><td className="border border-black px-2 py-1">{d.object || "-"} / {d.location || "-"}</td></tr>
-                    <tr><td className="border border-black px-2 py-1 font-semibold">Jadwal Pelaksanaan</td><td className="border border-black px-2 py-1">{d.starts || "-"} s.d. {d.ends || "-"}</td></tr>
-                    <tr><td className="border border-black px-2 py-1 font-semibold">Total Usulan RAB</td><td className="border border-black px-2 py-1 font-semibold">{money.format(BigInt(proposal.budget || "0"))}</td></tr>
-                  </tbody>
-                </table>
+              <section className="proposal-print-page-start space-y-3 text-sm">
+                <h2 className="text-center text-base font-bold uppercase">IDENTITAS DAN URAIAN UMUM</h2>
+
+                <div>
+                  <p className="font-semibold">1. Judul Penelitian</p>
+                  <p className="pl-4 pt-0.5">{proposal.title || "–"}</p>
+                </div>
+
+                <div>
+                  <p className="font-semibold">2. Tim Peneliti</p>
+                  <table className="mt-1.5 w-full border-collapse border border-black text-xs">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="w-8 border border-black px-2 py-1 text-center">No</th>
+                        <th className="border border-black px-2 py-1 text-left">Nama</th>
+                        <th className="border border-black px-2 py-1 text-left">NUPTK</th>
+                        <th className="border border-black px-2 py-1 text-left">Program Studi</th>
+                        <th className="border border-black px-2 py-1 text-left">Bidang Keahlian</th>
+                        <th className="w-28 border border-black px-2 py-1 text-center">Alokasi waktu (Jam/minggu)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td className="border border-black px-2 py-1 text-center">1</td>
+                        <td className="border border-black px-2 py-1">{proposal.owner} (Ketua Peneliti)</td>
+                        <td className="border border-black px-2 py-1">{proposal.ownerNuptk || "–"}</td>
+                        <td className="border border-black px-2 py-1">{proposal.ownerStudyProgram || "–"}</td>
+                        <td className="border border-black px-2 py-1">{fieldName}</td>
+                        <td className="border border-black px-2 py-1 text-center">–</td>
+                      </tr>
+                      {team.map((m, idx) => {
+                        const det = lookupLecturerDetail(m.id);
+                        return (
+                          <tr key={idx}>
+                            <td className="border border-black px-2 py-1 text-center">{idx + 2}</td>
+                            <td className="border border-black px-2 py-1">{det?.name ?? lookupLecturer(m.id)}</td>
+                            <td className="border border-black px-2 py-1">{det?.nuptk || det?.code || "–"}</td>
+                            <td className="border border-black px-2 py-1">{det?.studyProgram || "–"}</td>
+                            <td className="border border-black px-2 py-1">{String(m.expertise || "–")}</td>
+                            <td className="border border-black px-2 py-1 text-center">{m.hours ? String(m.hours) : "–"}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div>
+                  <p className="font-semibold">3. Objek Penelitian (jenis material yang diteliti dan segi penelitian)</p>
+                  <p className="pl-4 pt-0.5">{d.object || "–"}</p>
+                </div>
+
+                <div>
+                  <p className="font-semibold">4. Masa Pelaksanaan</p>
+                  <div className="pl-4 pt-0.5 space-y-0.5">
+                    <p><span className="inline-block w-20">Mulai</span>: {d.starts || "–"}</p>
+                    <p><span className="inline-block w-20">Berakhir</span>: {d.ends || "–"}</p>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="font-semibold">5. Usulan Biaya :</p>
+                  <p className="pl-4 pt-0.5">{money.format(BigInt(proposal.budget || "0"))}</p>
+                </div>
+
+                <div>
+                  <p className="font-semibold">6. Lokasi Penelitian :</p>
+                  <p className="pl-4 pt-0.5">{d.location || "–"}</p>
+                </div>
+
+                <div>
+                  <p className="font-semibold">7. Instansi lain yang terlibat (jika ada, sebutkan dan uraikan kontribusinya)</p>
+                  <p className="pl-4 pt-0.5">{d.partner ? (d.contribution ? `${d.partner} (${d.contribution})` : d.partner) : "–"}</p>
+                </div>
+
+                <div>
+                  <p className="font-semibold">8. Temuan yang ditargetkan</p>
+                  <p className="pl-4 pt-0.5">{d.findings || "–"}</p>
+                </div>
+
+                <div>
+                  <p className="font-semibold">9. Jurnal Ilmiah yang menjadi sasaran publikasi</p>
+                  <p className="pl-4 pt-0.5">{d.journal || "–"}</p>
+                </div>
               </section>
 
               <section className="space-y-1">

@@ -483,20 +483,58 @@ func (s service) exportProposalDocx(c *gin.Context, a actor) {
 	}, []int{4500, 4500}))
 
 	// Identitas
-	body.WriteString(docxHeading("IDENTITAS DAN URAIAN UMUM", "left", true))
-	identRows := [][]string{
-		{"Judul Penelitian", p.Title},
-		{"Skema / Periode", p.Scheme + " (" + p.Period + ")"},
-		{"Bidang Riset", meta.FieldName},
-		{"Objek & Lokasi", d.Object + " / " + d.Location},
-		{"Jangka Waktu", d.Starts + " s.d. " + d.Ends},
-		{"Instansi Mitra", d.Partner + " (" + d.Contribution + ")"},
-		{"Temuan Ditargetkan", d.Findings},
-		{"Jurnal Sasaran", d.Journal},
-		{"Sumber Dana", meta.FundingSource},
-		{"Total Usulan Biaya", formatRupiahID(p.Budget)},
+	body.WriteString(docxHeading("IDENTITAS DAN URAIAN UMUM", "center", true))
+	body.WriteString(docxParagraph("1. Judul Penelitian", true, 22, "left", 60))
+	body.WriteString(docxParagraph(p.Title, false, 22, "left", 140))
+
+	body.WriteString(docxParagraph("2. Tim Peneliti", true, 22, "left", 80))
+	teamRows := [][]string{
+		{"1", p.Owner + " (Ketua Peneliti)", meta.OwnerNuptk, meta.OwnerUnit, meta.FieldName, "-"},
 	}
-	body.WriteString(docxTable([]string{"Komponen", "Keterangan"}, identRows, []int{3000, 6000}))
+	for i, member := range d.Team {
+		info, ok := meta.Lecturers[member.ID]
+		name, nuptk, unit := fmt.Sprintf("Dosen #%d", member.ID), "-", "-"
+		if ok {
+			name = info.Name
+			if info.NUPTK != "" {
+				nuptk = info.NUPTK
+			} else if info.Code != "" {
+				nuptk = info.Code
+			}
+			if info.Unit != "" {
+				unit = info.Unit
+			}
+		}
+		hours := "-"
+		if member.Hours > 0 {
+			hours = fmt.Sprintf("%d", member.Hours)
+		}
+		teamRows = append(teamRows, []string{fmt.Sprintf("%d", i+2), name, nuptk, unit, member.Expertise, hours})
+	}
+	body.WriteString(docxTable([]string{"No", "Nama", "NUPTK", "Program Studi", "Bidang Keahlian", "Alokasi waktu (Jam/minggu)"}, teamRows, []int{600, 2200, 1500, 1700, 1700, 1300}))
+
+	body.WriteString(docxParagraph("3. Objek Penelitian (jenis material yang diteliti dan segi penelitian)", true, 22, "left", 60))
+	body.WriteString(docxParagraph(d.Object, false, 22, "left", 120))
+	body.WriteString(docxParagraph("4. Masa Pelaksanaan", true, 22, "left", 60))
+	body.WriteString(docxParagraph("Mulai : "+d.Starts, false, 22, "left", 40))
+	body.WriteString(docxParagraph("Berakhir : "+d.Ends, false, 22, "left", 120))
+	body.WriteString(docxParagraph("5. Usulan Biaya :", true, 22, "left", 60))
+	body.WriteString(docxParagraph(formatRupiahID(p.Budget), false, 22, "left", 120))
+	body.WriteString(docxParagraph("6. Lokasi Penelitian :", true, 22, "left", 60))
+	body.WriteString(docxParagraph(d.Location, false, 22, "left", 120))
+	body.WriteString(docxParagraph("7. Instansi lain yang terlibat (jika ada, sebutkan dan uraikan kontribusinya)", true, 22, "left", 60))
+	partnerText := "-"
+	if d.Partner != "" {
+		partnerText = d.Partner
+		if d.Contribution != "" {
+			partnerText += " (" + d.Contribution + ")"
+		}
+	}
+	body.WriteString(docxParagraph(partnerText, false, 22, "left", 120))
+	body.WriteString(docxParagraph("8. Temuan yang ditargetkan", true, 22, "left", 60))
+	body.WriteString(docxParagraph(d.Findings, false, 22, "left", 120))
+	body.WriteString(docxParagraph("9. Jurnal Ilmiah yang menjadi sasaran publikasi", true, 22, "left", 60))
+	body.WriteString(docxParagraph(d.Journal, false, 22, "left", 160))
 
 	body.WriteString(docxHeading("A. PETA JALAN PENELITIAN", "left", false))
 	body.WriteString(docxRichParagraphs(d.Roadmap))
