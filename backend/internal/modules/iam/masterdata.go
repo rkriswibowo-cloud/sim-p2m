@@ -20,6 +20,7 @@ type dataset struct {
 	parent         string
 	email          bool
 	parentRequired bool
+	program        bool
 }
 
 // Only these static identifiers are interpolated into queries.
@@ -32,7 +33,7 @@ var datasets = map[string]dataset{
 	"reviewers":         {table: "reviewers", email: true},
 	"funding-sources":   {table: "funding_sources"},
 	"scheme-groups":     {table: "scheme_groups"},
-	"schemes":           {table: "schemes", parent: "scheme_groups", parentRequired: true},
+	"schemes":           {table: "schemes", parent: "scheme_groups", parentRequired: true, program: true},
 	"research-fields":     {table: "research_fields"},
 	"budget-categories":   {table: "budget_categories"},
 	"output-target-years": {table: "output_target_years"},
@@ -46,6 +47,7 @@ type masterRecord struct {
 	ParentID   *int64 `json:"parentId"`
 	ParentName string `json:"parentName"`
 	Email      string `json:"email"`
+	Program    string `json:"program,omitempty"`
 }
 
 func (s service) listMaster(c *gin.Context, a actor) {
@@ -72,7 +74,7 @@ func (s service) listMaster(c *gin.Context, a actor) {
 			return
 		}
 	}
-	parentID, parentName, email, join := "NULL", "''", "''", ""
+	parentID, parentName, email, programCol, join := "NULL", "''", "''", "''", ""
 	if d.parent != "" {
 		parentID, parentName = "m.parent_id", "COALESCE(p.name,'')"
 		join = " LEFT JOIN " + d.parent + " p ON p.id=m.parent_id AND p.institution_id=m.institution_id"
@@ -80,8 +82,11 @@ func (s service) listMaster(c *gin.Context, a actor) {
 	if d.email {
 		email = "COALESCE(m.email,'')"
 	}
+	if d.program {
+		programCol = "m.program"
+	}
 	args := []any{a.tenant, after}
-	query := fmt.Sprintf("SELECT m.id,m.code,m.name,m.is_active,%s,%s,%s FROM %s m%s WHERE m.institution_id=? AND m.id>?", parentID, parentName, email, d.table, join)
+	query := fmt.Sprintf("SELECT m.id,m.code,m.name,m.is_active,%s,%s,%s,%s FROM %s m%s WHERE m.institution_id=? AND m.id>?", parentID, parentName, email, programCol, d.table, join)
 	if status != "" {
 		query += " AND m.is_active=?"
 		args = append(args, status == "active")
@@ -100,7 +105,7 @@ func (s service) listMaster(c *gin.Context, a actor) {
 	items := []masterRecord{}
 	for rows.Next() {
 		var item masterRecord
-		if err := rows.Scan(&item.ID, &item.Code, &item.Name, &item.Active, &item.ParentID, &item.ParentName, &item.Email); err != nil {
+		if err := rows.Scan(&item.ID, &item.Code, &item.Name, &item.Active, &item.ParentID, &item.ParentName, &item.Email, &item.Program); err != nil {
 			c.Status(503)
 			return
 		}
@@ -125,9 +130,9 @@ func (s service) saveMaster(c *gin.Context, a actor) {
 		return
 	}
 	var input struct {
-		Code, Name, Email string
-		Active            *bool
-		ParentID          *int64
+		Code, Name, Email, Program string
+		Active                     *bool
+		ParentID                   *int64
 	}
 	if c.ShouldBindJSON(&input) != nil || input.Active == nil {
 		c.Status(400)
@@ -135,6 +140,16 @@ func (s service) saveMaster(c *gin.Context, a actor) {
 	}
 	input.Code = strings.ToUpper(strings.TrimSpace(input.Code))
 	input.Name = strings.TrimSpace(input.Name)
+	input.Program = strings.TrimSpace(input.Program)
+	if d.program {
+		if input.Program == "" {
+			input.Program = "research"
+		}
+		if input.Program != "research" && input.Program != "community" {
+			c.Status(400)
+			return
+		}
+	}
 	if input.Code == "" || input.Name == "" || len(input.Code) > 64 || len(input.Name) > 200 ||
 		(d.parentRequired && input.ParentID == nil) || (d.parent == "" && input.ParentID != nil) {
 		c.Status(400)
@@ -179,6 +194,10 @@ func (s service) saveMaster(c *gin.Context, a actor) {
 		if d.email {
 			fields = append(fields, "email")
 			values = append(values, sql.NullString{String: input.Email, Valid: input.Email != ""})
+		}
+		if d.program {
+			fields = append(fields, "program")
+			values = append(values, input.Program)
 		}
 		if id == 0 {
 			fields = append(fields, "institution_id")
