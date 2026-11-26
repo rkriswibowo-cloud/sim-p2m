@@ -60,6 +60,7 @@ type myLecturerProfile struct {
 	Code         string `json:"code"`
 	Name         string `json:"name"`
 	Email        string `json:"email"`
+	Phone        string `json:"phone"`
 	NUPTK        string `json:"nuptk"`
 	Jafung       string `json:"jafung"`
 	StudyProgram string `json:"studyProgram"`
@@ -71,6 +72,7 @@ type lecturerAccountItem struct {
 	Code         string `json:"code"`
 	Name         string `json:"name"`
 	Email        string `json:"email"`
+	Phone        string `json:"phone"`
 	NUPTK        string `json:"nuptk"`
 	Jafung       string `json:"jafung"`
 	StudyProgram string `json:"studyProgram"`
@@ -82,21 +84,21 @@ type lecturerAccountItem struct {
 func (s service) getMyLecturerProfile(c *gin.Context, a actor) {
 	ctx := c.Request.Context()
 	var prof myLecturerProfile
-	err := s.db.QueryRowContext(ctx, `SELECT l.id, l.code, l.name, COALESCE(l.email,''), l.nuptk, l.jafung, COALESCE(sp.name,'-'), l.is_active
+	err := s.db.QueryRowContext(ctx, `SELECT l.id, l.code, l.name, COALESCE(l.email,''), COALESCE(l.phone,''), l.nuptk, l.jafung, COALESCE(sp.name,'-'), l.is_active
  FROM lecturers l
  LEFT JOIN study_programs sp ON sp.institution_id=l.institution_id AND sp.id=l.parent_id
  WHERE l.institution_id=? AND l.user_id=? LIMIT 1`, a.tenant, a.ID).
-		Scan(&prof.LecturerID, &prof.Code, &prof.Name, &prof.Email, &prof.NUPTK, &prof.Jafung, &prof.StudyProgram, &prof.Active)
+		Scan(&prof.LecturerID, &prof.Code, &prof.Name, &prof.Email, &prof.Phone, &prof.NUPTK, &prof.Jafung, &prof.StudyProgram, &prof.Active)
 	if errors.Is(err, sql.ErrNoRows) && strings.TrimSpace(a.Email) != "" {
 		// Fallback match by email, and automatically link user_id if unique
 		var count int
 		_ = s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM lecturers WHERE institution_id=? AND email=?", a.tenant, a.Email).Scan(&count)
 		if count == 1 {
-			err = s.db.QueryRowContext(ctx, `SELECT l.id, l.code, l.name, COALESCE(l.email,''), l.nuptk, l.jafung, COALESCE(sp.name,'-'), l.is_active
+			err = s.db.QueryRowContext(ctx, `SELECT l.id, l.code, l.name, COALESCE(l.email,''), COALESCE(l.phone,''), l.nuptk, l.jafung, COALESCE(sp.name,'-'), l.is_active
  FROM lecturers l
  LEFT JOIN study_programs sp ON sp.institution_id=l.institution_id AND sp.id=l.parent_id
  WHERE l.institution_id=? AND l.email=? LIMIT 1`, a.tenant, a.Email).
-				Scan(&prof.LecturerID, &prof.Code, &prof.Name, &prof.Email, &prof.NUPTK, &prof.Jafung, &prof.StudyProgram, &prof.Active)
+				Scan(&prof.LecturerID, &prof.Code, &prof.Name, &prof.Email, &prof.Phone, &prof.NUPTK, &prof.Jafung, &prof.StudyProgram, &prof.Active)
 			if err == nil {
 				_, _ = s.db.ExecContext(ctx, "UPDATE lecturers SET user_id=? WHERE institution_id=? AND id=? AND user_id IS NULL", a.ID, a.tenant, prof.LecturerID)
 			}
@@ -118,6 +120,7 @@ func (s service) updateMyLecturerProfile(c *gin.Context, a actor) {
 	var input struct {
 		NUPTK  string `json:"nuptk"`
 		Jafung string `json:"jafung"`
+		Phone  string `json:"phone"`
 	}
 	if c.ShouldBindJSON(&input) != nil {
 		c.Status(400)
@@ -125,8 +128,9 @@ func (s service) updateMyLecturerProfile(c *gin.Context, a actor) {
 	}
 	nuptk := strings.TrimSpace(input.NUPTK)
 	jafung := strings.TrimSpace(input.Jafung)
-	if len(nuptk) > 64 || !validJafungValues[jafung] {
-		c.JSON(400, gin.H{"error": "validation", "message": "Periksa isian NUPTK (maks. 64 karakter) dan pilihan Jabatan Fungsional."})
+	phone := strings.TrimSpace(input.Phone)
+	if len(nuptk) > 64 || len(phone) > 32 || !validJafungValues[jafung] {
+		c.JSON(400, gin.H{"error": "validation", "message": "Periksa isian NUPTK, Nomor HP, dan pilihan Jabatan Fungsional."})
 		return
 	}
 
@@ -146,7 +150,7 @@ func (s service) updateMyLecturerProfile(c *gin.Context, a actor) {
 		if err != nil {
 			return 0, err
 		}
-		if _, err := tx.ExecContext(ctx, "UPDATE lecturers SET user_id=?, nuptk=?, jafung=? WHERE id=?", a.ID, nuptk, jafung, lecturerID); err != nil {
+		if _, err := tx.ExecContext(ctx, "UPDATE lecturers SET user_id=?, nuptk=?, jafung=?, phone=? WHERE id=?", a.ID, nuptk, jafung, phone, lecturerID); err != nil {
 			return 0, err
 		}
 		return lecturerID, nil

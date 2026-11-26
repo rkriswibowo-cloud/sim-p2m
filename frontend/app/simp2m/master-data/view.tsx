@@ -15,7 +15,7 @@ const datasets = {
   faculties: { name: "Fakultas" },
   "study-programs": { name: "Program studi", parent: "faculties", relation: "Fakultas", required: true },
   units: { name: "Unit" },
-  lecturers: { name: "Dosen", parent: "study-programs", relation: "Program studi", contact: true, codeLabel: "Kode dosen / NIDN / NUPTK" },
+  lecturers: { name: "Dosen", parent: "study-programs", relation: "Program studi", contact: true, phone: true, codeLabel: "Kode dosen / NIDN / NUPTK" },
   students: { name: "Mahasiswa", parent: "study-programs", relation: "Program studi", required: true, contact: true, codeLabel: "NIM" },
   reviewers: { name: "Reviewer", contact: true },
   "funding-sources": { name: "Sumber dana" },
@@ -24,12 +24,12 @@ const datasets = {
   "research-fields": { name: "Bidang riset" },
   "budget-categories": { name: "Kategori RAB" },
   "output-target-years": { name: "Tahun target luaran", codeLabel: "Tahun (angka, misal 2026)" },
-} satisfies Record<string, { name: string; parent?: string; relation?: string; required?: boolean; contact?: boolean; program?: boolean; codeLabel?: string }>;
+} satisfies Record<string, { name: string; parent?: string; relation?: string; required?: boolean; contact?: boolean; phone?: boolean; program?: boolean; codeLabel?: string }>;
 
 type Kind = keyof typeof datasets;
-type Dataset = { name: string; parent?: string; relation?: string; required?: boolean; contact?: boolean; program?: boolean; codeLabel?: string };
+type Dataset = { name: string; parent?: string; relation?: string; required?: boolean; contact?: boolean; phone?: boolean; program?: boolean; codeLabel?: string };
 type Institution = { id: number; name: string; canMasterRead: boolean; canMasterManage: boolean };
-type Row = { id: number; code: string; name: string; active: boolean; parentId: number | null; parentName: string; email: string; program?: string };
+type Row = { id: number; code: string; name: string; active: boolean; parentId: number | null; parentName: string; email: string; phone?: string; program?: string };
 type Rows = { items: Row[]; next: number };
 type Mode = "production" | "trial-admin" | "trial-reader";
 
@@ -150,6 +150,7 @@ export function MasterDataPanel({ initialKind }: { initialKind?: string }) {
         body: JSON.stringify({
           code: fields.get("code"), name: fields.get("name"), active: fields.has("active"),
           email: fields.get("email") || "", parentId: parent ? Number(parent) : null,
+          ...(dataset.phone ? { phone: fields.get("phone") || "" } : {}),
           ...(dataset.program ? { program: fields.get("program") || "research" } : {}),
         }),
       });
@@ -229,6 +230,7 @@ export function MasterDataPanel({ initialKind }: { initialKind?: string }) {
             <Input label={dataset.codeLabel ?? "Kode"} name="code" defaultValue={edit?.code} required maxLength={64} />
             <Input label="Nama" name="name" defaultValue={edit?.name} required maxLength={200} />
             {dataset.contact && <Input label="Email" name="email" type="email" defaultValue={edit?.email} maxLength={254} />}
+            {dataset.phone && <Input label="Nomor HP" name="phone" type="tel" defaultValue={edit?.phone} maxLength={32} placeholder="08xxxxxxxxxx" />}
             {dataset.parent && <div>
               <label htmlFor="master-parent" className="block text-sm">{dataset.relation}</label>
               <select id="master-parent" name="parent" defaultValue={edit?.parentId ?? ""} required={dataset.required} className="w-full rounded border border-input bg-card p-2">
@@ -274,9 +276,9 @@ export function MasterDataPanel({ initialKind }: { initialKind?: string }) {
           {result?.items.length === 0 && <p className="text-sm">Tidak ada data yang cocok.</p>}
           {!!result?.items.length && <div className="overflow-x-auto">
             <table className="workspace-table w-full text-left text-sm">
-              <thead><tr><th>Kode</th><th>Nama</th>{dataset.parent && <th>{dataset.relation}</th>}{dataset.program && <th>Program</th>}<th>Status</th>{selected?.canMasterManage && <th>Aksi</th>}</tr></thead>
+              <thead><tr><th>Kode</th><th>Nama</th>{dataset.parent && <th>{dataset.relation}</th>}{dataset.phone && <th>Nomor HP</th>}{dataset.program && <th>Program</th>}<th>Status</th>{selected?.canMasterManage && <th>Aksi</th>}</tr></thead>
               <tbody>{result.items.map(row => <tr key={row.id}>
-                <td className="break-words">{row.code}</td><td className="break-words">{row.name}</td>{dataset.parent && <td>{row.parentName || "–"}</td>}{dataset.program && <td>{row.program === "community" ? "Pengabdian (PKM)" : "Penelitian"}</td>}<td><span className="workspace-status" data-active={row.active}>{row.active ? "Aktif" : "Nonaktif"}</span></td>
+                <td className="break-words">{row.code}</td><td className="break-words">{row.name}</td>{dataset.parent && <td>{row.parentName || "–"}</td>}{dataset.phone && <td className="break-words">{row.phone || "–"}</td>}{dataset.program && <td>{row.program === "community" ? "Pengabdian (PKM)" : "Penelitian"}</td>}<td><span className="workspace-status" data-active={row.active}>{row.active ? "Aktif" : "Nonaktif"}</span></td>
                 {selected?.canMasterManage && <td><div className="flex flex-wrap gap-1.5">
                   <Button type="button" variant="outline" size="sm" aria-label={`Ubah ${row.name}`} disabled={pending} onClick={() => { setAdding(false); setEdit(row); }}>Ubah</Button>
                   {row.active && <Button type="button" variant="ghost" size="icon-sm" className="text-destructive" title="Hapus" aria-label={`Hapus ${row.name}`} disabled={pending} onClick={() => void remove(row)}><Trash2 size={15} aria-hidden="true" /></Button>}

@@ -19,16 +19,17 @@ type dataset struct {
 	table          string
 	parent         string
 	email          bool
+	phone          bool
 	parentRequired bool
 	program        bool
 }
 
 // Only these static identifiers are interpolated into queries.
 var datasets = map[string]dataset{
-	"faculties":         {table: "faculties"},
-	"study-programs":    {table: "study_programs", parent: "faculties", parentRequired: true},
-	"units":             {table: "organization_units"},
-	"lecturers":         {table: "lecturers", parent: "study_programs", email: true},
+	"faculties":           {table: "faculties"},
+	"study-programs":      {table: "study_programs", parent: "faculties", parentRequired: true},
+	"units":               {table: "organization_units"},
+	"lecturers":           {table: "lecturers", parent: "study_programs", email: true, phone: true},
 	"students":          {table: "students", parent: "study_programs", email: true, parentRequired: true},
 	"reviewers":         {table: "reviewers", email: true},
 	"funding-sources":   {table: "funding_sources"},
@@ -47,6 +48,7 @@ type masterRecord struct {
 	ParentID   *int64 `json:"parentId"`
 	ParentName string `json:"parentName"`
 	Email      string `json:"email"`
+	Phone      string `json:"phone,omitempty"`
 	Program    string `json:"program,omitempty"`
 }
 
@@ -74,7 +76,7 @@ func (s service) listMaster(c *gin.Context, a actor) {
 			return
 		}
 	}
-	parentID, parentName, email, programCol, join := "NULL", "''", "''", "''", ""
+	parentID, parentName, email, phoneCol, programCol, join := "NULL", "''", "''", "''", "''", ""
 	if d.parent != "" {
 		parentID, parentName = "m.parent_id", "COALESCE(p.name,'')"
 		join = " LEFT JOIN " + d.parent + " p ON p.id=m.parent_id AND p.institution_id=m.institution_id"
@@ -82,11 +84,14 @@ func (s service) listMaster(c *gin.Context, a actor) {
 	if d.email {
 		email = "COALESCE(m.email,'')"
 	}
+	if d.phone {
+		phoneCol = "COALESCE(m.phone,'')"
+	}
 	if d.program {
 		programCol = "m.program"
 	}
 	args := []any{a.tenant, after}
-	query := fmt.Sprintf("SELECT m.id,m.code,m.name,m.is_active,%s,%s,%s,%s FROM %s m%s WHERE m.institution_id=? AND m.id>?", parentID, parentName, email, programCol, d.table, join)
+	query := fmt.Sprintf("SELECT m.id,m.code,m.name,m.is_active,%s,%s,%s,%s,%s FROM %s m%s WHERE m.institution_id=? AND m.id>?", parentID, parentName, email, phoneCol, programCol, d.table, join)
 	if status != "" {
 		query += " AND m.is_active=?"
 		args = append(args, status == "active")
@@ -105,7 +110,7 @@ func (s service) listMaster(c *gin.Context, a actor) {
 	items := []masterRecord{}
 	for rows.Next() {
 		var item masterRecord
-		if err := rows.Scan(&item.ID, &item.Code, &item.Name, &item.Active, &item.ParentID, &item.ParentName, &item.Email, &item.Program); err != nil {
+		if err := rows.Scan(&item.ID, &item.Code, &item.Name, &item.Active, &item.ParentID, &item.ParentName, &item.Email, &item.Phone, &item.Program); err != nil {
 			c.Status(503)
 			return
 		}
@@ -130,9 +135,9 @@ func (s service) saveMaster(c *gin.Context, a actor) {
 		return
 	}
 	var input struct {
-		Code, Name, Email, Program string
-		Active                     *bool
-		ParentID                   *int64
+		Code, Name, Email, Phone, Program string
+		Active                            *bool
+		ParentID                          *int64
 	}
 	if c.ShouldBindJSON(&input) != nil || input.Active == nil {
 		c.Status(400)
@@ -194,6 +199,14 @@ func (s service) saveMaster(c *gin.Context, a actor) {
 		if d.email {
 			fields = append(fields, "email")
 			values = append(values, sql.NullString{String: input.Email, Valid: input.Email != ""})
+		}
+		if d.phone {
+			phone := strings.TrimSpace(input.Phone)
+			if len(phone) > 32 {
+				phone = phone[:32]
+			}
+			fields = append(fields, "phone")
+			values = append(values, phone)
 		}
 		if d.program {
 			fields = append(fields, "program")

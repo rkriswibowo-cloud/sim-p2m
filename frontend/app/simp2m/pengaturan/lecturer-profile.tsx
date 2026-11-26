@@ -14,6 +14,7 @@ interface LecturerProfile {
   code: string;
   name: string;
   email: string;
+  phone: string;
   nuptk: string;
   jafung: string;
   studyProgram: string;
@@ -32,6 +33,7 @@ const jafungOptions = [
 export function LecturerProfileSettings({ institutionId }: { institutionId: number }) {
   const [profile, setProfile] = useState<LecturerProfile | null>(null);
   const [nuptk, setNuptk] = useState("");
+  const [phone, setPhone] = useState("");
   const [jafung, setJafung] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -49,6 +51,7 @@ export function LecturerProfileSettings({ institutionId }: { institutionId: numb
         if (cancelled) return;
         setProfile(data);
         setNuptk(data.nuptk ?? "");
+        setPhone(data.phone ?? "");
         setJafung(data.jafung ?? "");
         setError("");
       })
@@ -72,13 +75,14 @@ export function LecturerProfileSettings({ institutionId }: { institutionId: numb
       const res = await fetch(`/api/v1/iam/institutions/${institutionId}/my-lecturer-profile`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nuptk: nuptk.trim(), jafung }),
+        body: JSON.stringify({ nuptk: nuptk.trim(), phone: phone.trim(), jafung }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error ?? "Gagal menyimpan profil dosen.");
       const updated = body as LecturerProfile;
       setProfile(updated);
       setNuptk(updated.nuptk ?? "");
+      setPhone(updated.phone ?? "");
       setJafung(updated.jafung ?? "");
       toast.success("Profil dosen berhasil diperbarui.", workspaceToastOptions);
     } catch (err) {
@@ -132,6 +136,15 @@ export function LecturerProfileSettings({ institutionId }: { institutionId: numb
                 maxLength={32}
                 placeholder="Masukkan NUPTK dosen"
                 hint="Diperlukan untuk pengecekan kelayakan otomatis saat pengajuan skema hibah."
+              />
+              <Input
+                label="Nomor HP"
+                name="phone"
+                type="tel"
+                value={phone}
+                onChange={e => setPhone(e.target.value)}
+                maxLength={32}
+                placeholder="08xxxxxxxxxx"
               />
               <Field id="lecturer-jafung" label="Jabatan Fungsional">
                 <select

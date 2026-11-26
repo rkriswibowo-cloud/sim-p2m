@@ -1,0 +1,2 @@
+ALTER TABLE lecturers
+  ADD COLUMN phone VARCHAR(32) NOT NULL DEFAULT '' AFTER email;

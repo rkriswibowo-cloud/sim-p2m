@@ -30,6 +30,7 @@ type docxMeta struct {
 	OwnerEmail      string
 	OwnerCode       string
 	OwnerNuptk      string
+	OwnerPhone      string
 	OwnerUnit       string
 	OwnerFaculty    string
 	Lecturers       map[int64]personDetail
@@ -37,10 +38,13 @@ type docxMeta struct {
 }
 
 type personDetail struct {
-	ID   int64
-	Name string
-	Code string
-	Unit string
+	ID    int64
+	Name  string
+	Code  string
+	NUPTK string
+	Unit  string
+	Phone string
+	Email string
 }
 
 func (s service) loadProposalDocxMeta(ctx context.Context, a actor, id int64) (docxMeta, error) {
@@ -68,21 +72,21 @@ func (s service) loadProposalDocxMeta(ctx context.Context, a actor, id int64) (d
 		return meta, err
 	}
 
-	_ = s.db.QueryRowContext(ctx, `SELECT l.code, COALESCE(NULLIF(l.nuptk,''),l.code), COALESCE(sp.name,'-'), COALESCE(f.name,'-')
+	_ = s.db.QueryRowContext(ctx, `SELECT l.code, COALESCE(NULLIF(l.nuptk,''),l.code), COALESCE(sp.name,'-'), COALESCE(f.name,'-'), COALESCE(l.phone,'-')
  FROM lecturers l
  LEFT JOIN study_programs sp ON sp.institution_id=l.institution_id AND sp.id=l.parent_id
  LEFT JOIN faculties f ON f.institution_id=sp.institution_id AND f.id=sp.parent_id
- WHERE l.institution_id=? AND (l.user_id=? OR (l.user_id IS NULL AND l.email=?)) LIMIT 1`, a.tenant, a.ID, meta.OwnerEmail).Scan(&meta.OwnerCode, &meta.OwnerNuptk, &meta.OwnerUnit, &meta.OwnerFaculty)
+ WHERE l.institution_id=? AND (l.user_id=? OR (l.user_id IS NULL AND l.email=?)) LIMIT 1`, a.tenant, a.ID, meta.OwnerEmail).Scan(&meta.OwnerCode, &meta.OwnerNuptk, &meta.OwnerUnit, &meta.OwnerFaculty, &meta.OwnerPhone)
 
 	if len(prop.Data.Team) > 0 {
-		lRows, err := s.db.QueryContext(ctx, `SELECT l.id, l.name, l.code, COALESCE(sp.name,'-')
+		lRows, err := s.db.QueryContext(ctx, `SELECT l.id, l.name, l.code, COALESCE(NULLIF(l.nuptk,''),l.code), COALESCE(sp.name,'-'), COALESCE(l.phone,'-'), COALESCE(l.email,'-')
  FROM lecturers l LEFT JOIN study_programs sp ON sp.institution_id=l.institution_id AND sp.id=l.parent_id
  WHERE l.institution_id=?`, a.tenant)
 		if err == nil {
 			defer lRows.Close()
 			for lRows.Next() {
 				var d personDetail
-				if lRows.Scan(&d.ID, &d.Name, &d.Code, &d.Unit) == nil {
+				if lRows.Scan(&d.ID, &d.Name, &d.Code, &d.NUPTK, &d.Unit, &d.Phone, &d.Email) == nil {
 					meta.Lecturers[d.ID] = d
 				}
 			}
@@ -288,7 +292,7 @@ func buildDocxBytes(bodyXML string, diagrams ...docxDiagram) ([]byte, error) {
 </Relationships>`,
 		"word/document.xml": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
- <w:body>` + bodyXML + `<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1418" w:right="1418" w:bottom="1418" w:left="1418"/></w:sectPr>
+ <w:body>` + bodyXML + `<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1701" w:right="1701" w:bottom="1701" w:left="2268"/></w:sectPr>
  </w:body>
 </w:document>`,
 	}
@@ -352,6 +356,15 @@ func safeDocxFilename(prefix string, id int64) string {
 	return fmt.Sprintf("%s_%d.docx", nonSlugPattern.ReplaceAllString(prefix, "_"), id)
 }
 
+func formatIndonesianDate(t time.Time) string {
+	months := [...]string{"", "Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"}
+	loc, err := time.LoadLocation("Asia/Jakarta")
+	if err == nil {
+		t = t.In(loc)
+	}
+	return fmt.Sprintf("%d %s %d", t.Day(), months[int(t.Month())], t.Year())
+}
+
 func (s service) exportProposalDocx(c *gin.Context, a actor) {
 	id := target(c)
 	if id < 1 {
@@ -400,16 +413,74 @@ func (s service) exportProposalDocx(c *gin.Context, a actor) {
 	}
 
 	body.WriteString(docxHeading("HALAMAN PENGESAHAN", "center", true))
-	approvalRows := [][]string{{"Judul Penelitian", p.Title}, {"Ketua Peneliti", ownerLabel}, {"Program Studi", meta.OwnerUnit}}
-	for i, member := range d.Team {
-		name := fmt.Sprintf("Dosen #%d", member.ID)
-		if info, ok := meta.Lecturers[member.ID]; ok {
-			name = info.Name
-		}
-		approvalRows = append(approvalRows, []string{fmt.Sprintf("Anggota Peneliti %d", i+1), name})
+	body.WriteString(docxParagraph("PROPOSAL PENELITIAN", true, 24, "center", 240))
+	romanIdx := []string{"I", "II", "III", "IV", "V"}
+	approvalRows := [][]string{
+		{"Judul Penelitian", ": " + p.Title},
+		{"Bidang Riset", ": " + meta.FieldName},
+		{"Skema Riset", ": " + p.Scheme},
+		{"Dana yang diajukan", ": " + formatRupiahID(p.Budget)},
+		{"Ketua Peneliti", ""},
+		{"  Nama", ": " + p.Owner},
+		{"  NIDN/NUPTK", ": " + meta.OwnerNuptk},
+		{"  Program Studi", ": " + meta.OwnerUnit},
+		{"  Nomor HP", ": " + meta.OwnerPhone},
+		{"  Email", ": " + meta.OwnerEmail},
 	}
-	body.WriteString(docxTable([]string{"Identitas", "Keterangan"}, approvalRows, []int{3000, 6000}))
-	body.WriteString(docxTable([]string{"Mengetahui, Kepala LPPM", "Ketua Peneliti"}, [][]string{{"", ""}, {"(........................................)", p.Owner}}, []int{4500, 4500}))
+	for i, member := range d.Team {
+		idxLabel := fmt.Sprintf("%d", i+1)
+		if i < len(romanIdx) {
+			idxLabel = romanIdx[i]
+		}
+		info, ok := meta.Lecturers[member.ID]
+		name, nuptk, unit, phone, email := fmt.Sprintf("Dosen #%d", member.ID), "-", "-", "-", "-"
+		if ok {
+			name = info.Name
+			if info.NUPTK != "" {
+				nuptk = info.NUPTK
+			} else if info.Code != "" {
+				nuptk = info.Code
+			}
+			if info.Unit != "" {
+				unit = info.Unit
+			}
+			if info.Phone != "" {
+				phone = info.Phone
+			}
+			if info.Email != "" {
+				email = info.Email
+			}
+		}
+		approvalRows = append(approvalRows,
+			[]string{"Anggota Peneliti " + idxLabel, ""},
+			[]string{"  Nama", ": " + name},
+			[]string{"  NIDN/NUPTK", ": " + nuptk},
+			[]string{"  Program Studi", ": " + unit},
+			[]string{"  Nomor HP", ": " + phone},
+			[]string{"  Email", ": " + email},
+		)
+	}
+	approvalRows = append(approvalRows, []string{"Jumlah Mahasiswa yang dilibatkan", fmt.Sprintf(": %d Orang", len(d.Students))})
+	outputList := "-"
+	if len(d.Outputs) > 0 {
+		parts := []string{}
+		for _, o := range d.Outputs {
+			parts = append(parts, fmt.Sprintf("%s (%s, %d)", o.Kind, o.Status, o.Year))
+		}
+		outputList = strings.Join(parts, "; ")
+	}
+	approvalRows = append(approvalRows, []string{"Luaran yang dijanjikan", ": " + outputList})
+	body.WriteString(docxTable([]string{"Komponen", "Keterangan"}, approvalRows, []int{3200, 5800}))
+
+	body.WriteString(docxParagraph("Sidoarjo, "+formatIndonesianDate(time.Now()), false, 22, "right", 160))
+	body.WriteString(docxTable([]string{"Menyetujui,\nKetua Program Studi", "Ketua Peneliti"}, [][]string{
+		{"\n\n\n____________________________", "\n\n\n" + p.Owner},
+		{"NUPTK.", "NUPTK. " + meta.OwnerNuptk},
+	}, []int{4500, 4500}))
+	body.WriteString(docxTable([]string{"Mengetahui,\nDekan Fakultas " + meta.OwnerFaculty, "Disahkan,\nPlt. Kepala LPPM"}, [][]string{
+		{"\n\n\n____________________________", "\n\n\n____________________________"},
+		{"NUPTK.", "NUPTK."},
+	}, []int{4500, 4500}))
 
 	// Identitas
 	body.WriteString(docxHeading("IDENTITAS DAN URAIAN UMUM", "left", true))

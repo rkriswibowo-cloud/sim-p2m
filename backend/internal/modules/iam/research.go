@@ -36,11 +36,14 @@ type proposal struct {
 	Budget               string          `json:"budget"`
 	Scheme               string          `json:"scheme"`
 	Period               string          `json:"period"`
-	Owner                string          `json:"owner"`
-	OwnerNuptk           string          `json:"ownerNuptk"`
-	OwnerStudyProgram    string          `json:"ownerStudyProgram"`
-	OwnerFaculty         string          `json:"ownerFaculty"`
-	ProposalYear         int             `json:"proposalYear"`
+	Owner                string           `json:"owner"`
+	OwnerNuptk           string           `json:"ownerNuptk"`
+	OwnerStudyProgram    string           `json:"ownerStudyProgram"`
+	OwnerFaculty         string           `json:"ownerFaculty"`
+	OwnerPhone           string           `json:"ownerPhone"`
+	OwnerEmail           string           `json:"ownerEmail"`
+	ProposalYear         int              `json:"proposalYear"`
+	TeamDetails          []lecturerDetail `json:"teamDetails,omitempty"`
 	UpdatedAt            time.Time       `json:"updatedAt"`
 	Data                 proposalData    `json:"data"`
 	RoadmapImage         bool            `json:"roadmapImage"`
@@ -52,8 +55,18 @@ type proposal struct {
 	ApprovedBudget       *string         `json:"approvedBudget"`
 	DecisionNote         string          `json:"decisionNote"`
 	Consents             []memberConsent `json:"consents"`
-	Approvals            []approvalEntry `json:"approvals,omitempty"`
-	PublicReviews        []reviewRow     `json:"publicReviews,omitempty"`
+	Approvals            []approvalEntry  `json:"approvals,omitempty"`
+	PublicReviews        []reviewRow      `json:"publicReviews,omitempty"`
+}
+
+type lecturerDetail struct {
+	ID           int64  `json:"id"`
+	Name         string `json:"name"`
+	Code         string `json:"code"`
+	NUPTK        string `json:"nuptk"`
+	StudyProgram string `json:"studyProgram"`
+	Phone        string `json:"phone"`
+	Email        string `json:"email"`
 }
 
 const proposalSelectFields = `SELECT p.id,p.grant_version_id,v.period_id,v.scheme_id,v.version_no,(v.active_lecturer OR v.manual_requirements<>''),p.research_field_id,p.title,p.status,p.revision,
@@ -167,12 +180,26 @@ func (s service) getProposal(c *gin.Context, a actor) {
 	}
 	item.Consents = consents
 	_ = s.db.QueryRowContext(c.Request.Context(), "SELECT proposal_year FROM grant_periods WHERE institution_id=? AND id=?", a.tenant, item.PeriodID).Scan(&item.ProposalYear)
-	_ = s.db.QueryRowContext(c.Request.Context(), `SELECT COALESCE(NULLIF(l.nuptk,''),l.code), COALESCE(sp.name,''), COALESCE(f.name,'')
+	_ = s.db.QueryRowContext(c.Request.Context(), `SELECT COALESCE(NULLIF(l.nuptk,''),l.code), COALESCE(sp.name,''), COALESCE(f.name,''), COALESCE(l.phone,''), COALESCE(NULLIF(l.email,''),?)
  FROM lecturers l
  LEFT JOIN study_programs sp ON sp.institution_id=l.institution_id AND sp.id=l.parent_id
  LEFT JOIN faculties f ON f.institution_id=sp.institution_id AND f.id=sp.parent_id
- WHERE l.institution_id=? AND (l.user_id=? OR (l.user_id IS NULL AND l.email=?)) LIMIT 1`, a.tenant, a.ID, a.Email).
-		Scan(&item.OwnerNuptk, &item.OwnerStudyProgram, &item.OwnerFaculty)
+ WHERE l.institution_id=? AND (l.user_id=? OR (l.user_id IS NULL AND l.email=?)) LIMIT 1`, a.Email, a.tenant, a.ID, a.Email).
+		Scan(&item.OwnerNuptk, &item.OwnerStudyProgram, &item.OwnerFaculty, &item.OwnerPhone, &item.OwnerEmail)
+	if item.OwnerEmail == "" {
+		item.OwnerEmail = a.Email
+	}
+	if lRows, lErr := s.db.QueryContext(c.Request.Context(), `SELECT l.id, l.name, l.code, COALESCE(NULLIF(l.nuptk,''),l.code), COALESCE(sp.name,'-'), COALESCE(l.phone,''), COALESCE(l.email,'')
+ FROM lecturers l LEFT JOIN study_programs sp ON sp.institution_id=l.institution_id AND sp.id=l.parent_id
+ WHERE l.institution_id=?`, a.tenant); lErr == nil {
+		defer lRows.Close()
+		for lRows.Next() {
+			var ld lecturerDetail
+			if lRows.Scan(&ld.ID, &ld.Name, &ld.Code, &ld.NUPTK, &ld.StudyProgram, &ld.Phone, &ld.Email) == nil {
+				item.TeamDetails = append(item.TeamDetails, ld)
+			}
+		}
+	}
 	if apps, err := loadApprovalsForProposal(c.Request.Context(), s.db, a.tenant, item.ID); err == nil {
 		item.Approvals = apps
 	}

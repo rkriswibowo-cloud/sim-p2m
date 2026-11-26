@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Printer, X } from "lucide-react";
+import { Fragment } from "react";
 import { createPortal } from "react-dom";
 import type { Choice, ProposalData } from "./proposal-fields";
 import { sanitizeClientHtml } from "./rich-editor";
@@ -24,7 +25,10 @@ type PrintableProposal = {
   ownerNuptk?: string;
   ownerStudyProgram?: string;
   ownerFaculty?: string;
+  ownerPhone?: string;
+  ownerEmail?: string;
   proposalYear?: number;
+  teamDetails?: { id: number; name: string; code: string; nuptk: string; studyProgram: string; phone: string; email: string }[];
   budget: string;
   fieldId: number | null;
   status: string;
@@ -65,7 +69,10 @@ export function PrintPreviewModal({
   const d = proposal.data;
   const students = d.students ?? [];
   const team = d.team ?? [];
+  const outputs = d.outputs ?? [];
+  const romanIdx = ["I", "II", "III", "IV", "V"];
   const lookupLecturer = (id: unknown) => options.lecturers.find((l) => l.id === Number(id))?.name ?? `Dosen #${id}`;
+  const lookupLecturerDetail = (id: unknown) => proposal.teamDetails?.find((l) => l.id === Number(id));
   const lookupStudent = (id: unknown) => options.students.find((s) => s.id === Number(id))?.name ?? `Mahasiswa #${id}`;
 
   function renderHtmlBlock(raw?: string) {
@@ -217,17 +224,109 @@ export function PrintPreviewModal({
                 </div>
               </div>
 
-              <section className="proposal-print-page-start space-y-3">
-                <h2 className="border-b border-slate-300 pb-2 text-center text-base font-bold uppercase">Halaman Pengesahan</h2>
-                <dl className="space-y-1 text-sm">
-                  <dt className="font-semibold">Judul Penelitian</dt><dd>{proposal.title || "–"}</dd>
-                  <dt className="font-semibold">Ketua Peneliti</dt><dd>{proposal.owner}</dd>
-                  {!!team.length && <><dt className="font-semibold">Anggota Peneliti</dt>
-                    {team.map((member, index) => <dd key={index}>{lookupLecturer(member.id)}</dd>)}</>}
-                </dl>
-                <div className="proposal-print-signatures grid grid-cols-2 gap-8 pt-8 text-center text-sm">
-                  <div><p>Mengetahui,</p><p className="font-semibold">Kepala LPPM</p><div className="h-16" /><p>(........................................)</p></div>
-                  <div><p>Ketua Peneliti,</p><div className="h-[4.9rem]" /><p className="font-semibold">{proposal.owner}</p></div>
+              <section className="proposal-print-page-start space-y-4">
+                <div className="text-center font-bold uppercase leading-snug">
+                  <h2>HALAMAN PENGESAHAN</h2>
+                  <p>PROPOSAL PENELITIAN</p>
+                </div>
+
+                <table className="w-full border-collapse text-sm">
+                  <tbody>
+                    <tr>
+                      <td className="w-56 py-0.5 align-top">Judul Penelitian</td>
+                      <td className="w-4 py-0.5 align-top">:</td>
+                      <td className="py-0.5 font-semibold">{proposal.title || "–"}</td>
+                    </tr>
+                    <tr>
+                      <td className="py-0.5 align-top">Bidang Riset</td>
+                      <td className="py-0.5 align-top">:</td>
+                      <td className="py-0.5">{fieldName}</td>
+                    </tr>
+                    <tr>
+                      <td className="py-0.5 align-top">Skema Riset</td>
+                      <td className="py-0.5 align-top">:</td>
+                      <td className="py-0.5">{proposal.scheme}</td>
+                    </tr>
+                    <tr>
+                      <td className="py-0.5 align-top">Dana yang diajukan</td>
+                      <td className="py-0.5 align-top">:</td>
+                      <td className="py-0.5">{money.format(BigInt(proposal.budget || "0"))}</td>
+                    </tr>
+
+                    <tr><td colSpan={3} className="pt-2 font-semibold">Ketua Peneliti</td></tr>
+                    <tr><td className="py-0.5 pl-3">Nama</td><td className="py-0.5">:</td><td className="py-0.5">{proposal.owner}</td></tr>
+                    <tr><td className="py-0.5 pl-3">NIDN/NUPTK</td><td className="py-0.5">:</td><td className="py-0.5">{proposal.ownerNuptk || "–"}</td></tr>
+                    <tr><td className="py-0.5 pl-3">Program Studi</td><td className="py-0.5">:</td><td className="py-0.5">{proposal.ownerStudyProgram || "–"}</td></tr>
+                    <tr><td className="py-0.5 pl-3">Nomor HP</td><td className="py-0.5">:</td><td className="py-0.5">{proposal.ownerPhone || "–"}</td></tr>
+                    <tr><td className="py-0.5 pl-3">Email</td><td className="py-0.5">:</td><td className="py-0.5">{proposal.ownerEmail || "–"}</td></tr>
+
+                    {team.map((member, idx) => {
+                      const det = lookupLecturerDetail(member.id);
+                      const label = romanIdx[idx] ?? String(idx + 1);
+                      return (
+                        <Fragment key={idx}>
+                          <tr><td colSpan={3} className="pt-2 font-semibold">Anggota Peneliti {label}</td></tr>
+                          <tr><td className="py-0.5 pl-3">Nama</td><td className="py-0.5">:</td><td className="py-0.5">{det?.name ?? lookupLecturer(member.id)}</td></tr>
+                          <tr><td className="py-0.5 pl-3">NIDN/NUPTK</td><td className="py-0.5">:</td><td className="py-0.5">{det?.nuptk || det?.code || "–"}</td></tr>
+                          <tr><td className="py-0.5 pl-3">Program Studi</td><td className="py-0.5">:</td><td className="py-0.5">{det?.studyProgram || "–"}</td></tr>
+                          <tr><td className="py-0.5 pl-3">Nomor HP</td><td className="py-0.5">:</td><td className="py-0.5">{det?.phone || "–"}</td></tr>
+                          <tr><td className="py-0.5 pl-3">Email</td><td className="py-0.5">:</td><td className="py-0.5">{det?.email || "–"}</td></tr>
+                        </Fragment>
+                      );
+                    })}
+
+                    <tr>
+                      <td className="pt-2 py-0.5 align-top">Jumlah Mahasiswa yang dilibatkan</td>
+                      <td className="pt-2 py-0.5 align-top">:</td>
+                      <td className="pt-2 py-0.5">{students.length} Orang</td>
+                    </tr>
+                    <tr>
+                      <td className="py-0.5 align-top">Luaran yang dijanjikan</td>
+                      <td className="py-0.5 align-top">:</td>
+                      <td className="py-0.5">
+                        {outputs.length === 0 ? "–" : (
+                          <ul className="list-disc pl-4 space-y-0.5">
+                            {outputs.map((o, i) => (
+                              <li key={i}>{String(o.kind || "-")} ({String(o.status || "-")}, {String(o.year || "-")})</li>
+                            ))}
+                          </ul>
+                        )}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                <div className="proposal-print-signatures pt-6 text-sm">
+                  <p className="text-right">
+                    Sidoarjo, {new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
+                  </p>
+                  <div className="mt-4 grid grid-cols-2 gap-x-10 gap-y-8">
+                    <div>
+                      <p>Menyetujui,</p>
+                      <p>Ketua Program Studi</p>
+                      <div className="h-16" />
+                      <p className="border-t border-dotted border-black pt-1">NUPTK.</p>
+                    </div>
+                    <div>
+                      <p>&nbsp;</p>
+                      <p>Ketua Peneliti</p>
+                      <div className="h-16" />
+                      <p className="font-semibold">{proposal.owner}</p>
+                      <p className="border-t border-dotted border-black pt-1">NUPTK. {proposal.ownerNuptk || ""}</p>
+                    </div>
+                    <div>
+                      <p>Mengetahui,</p>
+                      <p>Dekan Fakultas {proposal.ownerFaculty || "......"}</p>
+                      <div className="h-16" />
+                      <p className="border-t border-dotted border-black pt-1">NUPTK.</p>
+                    </div>
+                    <div>
+                      <p>Disahkan,</p>
+                      <p>Plt. Kepala LPPM</p>
+                      <div className="h-16" />
+                      <p className="border-t border-dotted border-black pt-1">NUPTK.</p>
+                    </div>
+                  </div>
                 </div>
               </section>
 
