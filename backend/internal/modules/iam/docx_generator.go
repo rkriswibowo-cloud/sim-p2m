@@ -403,6 +403,15 @@ func safeDocxFilename(prefix string, id int64) string {
 	return fmt.Sprintf("%s_%d.docx", nonSlugPattern.ReplaceAllString(prefix, "_"), id)
 }
 
+func safeDocxNameFilename(prefix, ownerName string, id int64) string {
+	cleanPrefix := strings.Trim(nonSlugPattern.ReplaceAllString(prefix, "_"), "_")
+	cleanOwner := strings.Trim(nonSlugPattern.ReplaceAllString(strings.TrimSpace(ownerName), "_"), "_")
+	if cleanOwner == "" {
+		return fmt.Sprintf("%s_%d.docx", cleanPrefix, id)
+	}
+	return fmt.Sprintf("%s_%s.docx", cleanPrefix, cleanOwner)
+}
+
 func formatIndonesianDate(t time.Time) string {
 	months := [...]string{"", "Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"}
 	loc, err := time.LoadLocation("Asia/Jakarta")
@@ -770,7 +779,7 @@ func (s service) exportProposalDocx(c *gin.Context, a actor) {
 		c.Status(500)
 		return
 	}
-	filename := safeDocxFilename("Proposal_Penelitian", p.ID)
+	filename := safeDocxNameFilename("proposal", p.Owner, p.ID)
 	c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 	c.Header("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": filename}))
 	c.Header("Cache-Control", "private, no-store")
@@ -854,7 +863,7 @@ func (s service) exportStudentLetterDocx(c *gin.Context, a actor) {
 		c.Status(500)
 		return
 	}
-	filename := safeDocxFilename("Surat_Keterlibatan_Mahasiswa", p.ID)
+	filename := safeDocxNameFilename("surat_mahasiswa", p.Owner, p.ID)
 	c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 	c.Header("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": filename}))
 	c.Header("Cache-Control", "private, no-store")
