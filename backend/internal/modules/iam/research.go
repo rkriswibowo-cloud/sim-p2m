@@ -42,8 +42,9 @@ type proposal struct {
 	OwnerFaculty         string           `json:"ownerFaculty"`
 	OwnerPhone           string           `json:"ownerPhone"`
 	OwnerEmail           string           `json:"ownerEmail"`
-	ProposalYear         int              `json:"proposalYear"`
-	TeamDetails          []lecturerDetail `json:"teamDetails,omitempty"`
+	ProposalYear         int               `json:"proposalYear"`
+	TeamDetails          []lecturerDetail  `json:"teamDetails,omitempty"`
+	Officials            proposalOfficials `json:"officials"`
 	UpdatedAt            time.Time       `json:"updatedAt"`
 	Data                 proposalData    `json:"data"`
 	RoadmapImage         bool            `json:"roadmapImage"`
@@ -67,6 +68,47 @@ type lecturerDetail struct {
 	StudyProgram string `json:"studyProgram"`
 	Phone        string `json:"phone"`
 	Email        string `json:"email"`
+}
+
+type officialInfo struct {
+	Name  string `json:"name"`
+	NUPTK string `json:"nuptk"`
+}
+
+type proposalOfficials struct {
+	Kaprodi   *officialInfo `json:"kaprodi,omitempty"`
+	Dekan     *officialInfo `json:"dekan,omitempty"`
+	KetuaLPPM *officialInfo `json:"ketuaLppm,omitempty"`
+	Rektor    *officialInfo `json:"rektor,omitempty"`
+}
+
+func loadProposalOfficials(ctx context.Context, db *sql.DB, tenant, studyProgramID, facultyID int64) proposalOfficials {
+	var out proposalOfficials
+	queryOne := func(pos string, parentID int64) *officialInfo {
+		var info officialInfo
+		var err error
+		if parentID > 0 {
+			err = db.QueryRowContext(ctx, `SELECT name, code FROM institution_officials
+ WHERE institution_id=? AND position=? AND is_active AND parent_id=? ORDER BY id DESC LIMIT 1`, tenant, pos, parentID).
+				Scan(&info.Name, &info.NUPTK)
+		} else {
+			err = sql.ErrNoRows
+		}
+		if errors.Is(err, sql.ErrNoRows) {
+			err = db.QueryRowContext(ctx, `SELECT name, code FROM institution_officials
+ WHERE institution_id=? AND position=? AND is_active ORDER BY id DESC LIMIT 1`, tenant, pos).
+				Scan(&info.Name, &info.NUPTK)
+		}
+		if err != nil {
+			return nil
+		}
+		return &info
+	}
+	out.Kaprodi = queryOne("kaprodi", studyProgramID)
+	out.Dekan = queryOne("dekan", facultyID)
+	out.KetuaLPPM = queryOne("ketua_lppm", 0)
+	out.Rektor = queryOne("rektor", 0)
+	return out
 }
 
 const proposalSelectFields = `SELECT p.id,p.grant_version_id,v.period_id,v.scheme_id,v.version_no,(v.active_lecturer OR v.manual_requirements<>''),p.research_field_id,p.title,p.status,p.revision,
@@ -179,13 +221,15 @@ func (s service) getProposal(c *gin.Context, a actor) {
 		return
 	}
 	item.Consents = consents
+	var ownerSPID, ownerFacID int64
 	_ = s.db.QueryRowContext(c.Request.Context(), "SELECT proposal_year FROM grant_periods WHERE institution_id=? AND id=?", a.tenant, item.PeriodID).Scan(&item.ProposalYear)
-	_ = s.db.QueryRowContext(c.Request.Context(), `SELECT COALESCE(NULLIF(l.nuptk,''),l.code), COALESCE(sp.name,''), COALESCE(f.name,''), COALESCE(l.phone,''), COALESCE(NULLIF(l.email,''),?)
+	_ = s.db.QueryRowContext(c.Request.Context(), `SELECT COALESCE(NULLIF(l.nuptk,''),l.code), COALESCE(sp.name,''), COALESCE(f.name,''), COALESCE(l.phone,''), COALESCE(NULLIF(l.email,''),?), COALESCE(sp.id,0), COALESCE(f.id,0)
  FROM lecturers l
  LEFT JOIN study_programs sp ON sp.institution_id=l.institution_id AND sp.id=l.parent_id
  LEFT JOIN faculties f ON f.institution_id=sp.institution_id AND f.id=sp.parent_id
  WHERE l.institution_id=? AND (l.user_id=? OR (l.user_id IS NULL AND l.email=?)) LIMIT 1`, a.Email, a.tenant, a.ID, a.Email).
-		Scan(&item.OwnerNuptk, &item.OwnerStudyProgram, &item.OwnerFaculty, &item.OwnerPhone, &item.OwnerEmail)
+		Scan(&item.OwnerNuptk, &item.OwnerStudyProgram, &item.OwnerFaculty, &item.OwnerPhone, &item.OwnerEmail, &ownerSPID, &ownerFacID)
+	item.Officials = loadProposalOfficials(c.Request.Context(), s.db, a.tenant, ownerSPID, ownerFacID)
 	if item.OwnerEmail == "" {
 		item.OwnerEmail = a.Email
 	}

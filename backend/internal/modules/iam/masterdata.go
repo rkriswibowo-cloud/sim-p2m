@@ -22,6 +22,7 @@ type dataset struct {
 	phone          bool
 	parentRequired bool
 	program        bool
+	position       bool
 }
 
 // Only these static identifiers are interpolated into queries.
@@ -32,6 +33,7 @@ var datasets = map[string]dataset{
 	"lecturers":           {table: "lecturers", parent: "study_programs", email: true, phone: true},
 	"students":          {table: "students", parent: "study_programs", email: true, parentRequired: true},
 	"reviewers":         {table: "reviewers", email: true},
+	"officials":         {table: "institution_officials", position: true},
 	"funding-sources":   {table: "funding_sources"},
 	"scheme-groups":     {table: "scheme_groups"},
 	"schemes":           {table: "schemes", parent: "scheme_groups", parentRequired: true, program: true},
@@ -50,6 +52,7 @@ type masterRecord struct {
 	Email      string `json:"email"`
 	Phone      string `json:"phone,omitempty"`
 	Program    string `json:"program,omitempty"`
+	Position   string `json:"position,omitempty"`
 }
 
 func (s service) listMaster(c *gin.Context, a actor) {
@@ -76,10 +79,15 @@ func (s service) listMaster(c *gin.Context, a actor) {
 			return
 		}
 	}
-	parentID, parentName, email, phoneCol, programCol, join := "NULL", "''", "''", "''", "''", ""
+	parentID, parentName, email, phoneCol, programCol, posCol, join := "NULL", "''", "''", "''", "''", "''", ""
 	if d.parent != "" {
 		parentID, parentName = "m.parent_id", "COALESCE(p.name,'')"
 		join = " LEFT JOIN " + d.parent + " p ON p.id=m.parent_id AND p.institution_id=m.institution_id"
+	} else if d.position {
+		parentID = "m.parent_id"
+		parentName = "CASE WHEN m.position='kaprodi' THEN COALESCE(sp.name,'') WHEN m.position='dekan' THEN COALESCE(f.name,'') ELSE '' END"
+		join = " LEFT JOIN study_programs sp ON m.position='kaprodi' AND sp.id=m.parent_id AND sp.institution_id=m.institution_id LEFT JOIN faculties f ON m.position='dekan' AND f.id=m.parent_id AND f.institution_id=m.institution_id"
+		posCol = "m.position"
 	}
 	if d.email {
 		email = "COALESCE(m.email,'')"
@@ -91,7 +99,7 @@ func (s service) listMaster(c *gin.Context, a actor) {
 		programCol = "m.program"
 	}
 	args := []any{a.tenant, after}
-	query := fmt.Sprintf("SELECT m.id,m.code,m.name,m.is_active,%s,%s,%s,%s,%s FROM %s m%s WHERE m.institution_id=? AND m.id>?", parentID, parentName, email, phoneCol, programCol, d.table, join)
+	query := fmt.Sprintf("SELECT m.id,m.code,m.name,m.is_active,%s,%s,%s,%s,%s,%s FROM %s m%s WHERE m.institution_id=? AND m.id>?", parentID, parentName, email, phoneCol, programCol, posCol, d.table, join)
 	if status != "" {
 		query += " AND m.is_active=?"
 		args = append(args, status == "active")
@@ -110,7 +118,7 @@ func (s service) listMaster(c *gin.Context, a actor) {
 	items := []masterRecord{}
 	for rows.Next() {
 		var item masterRecord
-		if err := rows.Scan(&item.ID, &item.Code, &item.Name, &item.Active, &item.ParentID, &item.ParentName, &item.Email, &item.Phone, &item.Program); err != nil {
+		if err := rows.Scan(&item.ID, &item.Code, &item.Name, &item.Active, &item.ParentID, &item.ParentName, &item.Email, &item.Phone, &item.Program, &item.Position); err != nil {
 			c.Status(503)
 			return
 		}
@@ -135,9 +143,9 @@ func (s service) saveMaster(c *gin.Context, a actor) {
 		return
 	}
 	var input struct {
-		Code, Name, Email, Phone, Program string
-		Active                            *bool
-		ParentID                          *int64
+		Code, Name, Email, Phone, Program, Position string
+		Active                                      *bool
+		ParentID                                    *int64
 	}
 	if c.ShouldBindJSON(&input) != nil || input.Active == nil {
 		c.Status(400)
@@ -146,6 +154,7 @@ func (s service) saveMaster(c *gin.Context, a actor) {
 	input.Code = strings.ToUpper(strings.TrimSpace(input.Code))
 	input.Name = strings.TrimSpace(input.Name)
 	input.Program = strings.TrimSpace(input.Program)
+	input.Position = strings.TrimSpace(input.Position)
 	if d.program {
 		if input.Program == "" {
 			input.Program = "research"
@@ -155,8 +164,17 @@ func (s service) saveMaster(c *gin.Context, a actor) {
 			return
 		}
 	}
+	if d.position {
+		if input.Position != "kaprodi" && input.Position != "dekan" && input.Position != "ketua_lppm" && input.Position != "rektor" {
+			c.Status(400)
+			return
+		}
+		if input.Position == "ketua_lppm" || input.Position == "rektor" {
+			input.ParentID = nil
+		}
+	}
 	if input.Code == "" || input.Name == "" || len(input.Code) > 64 || len(input.Name) > 200 ||
-		(d.parentRequired && input.ParentID == nil) || (d.parent == "" && input.ParentID != nil) {
+		(d.parentRequired && input.ParentID == nil) || (d.parent == "" && !d.position && input.ParentID != nil) {
 		c.Status(400)
 		return
 	}
@@ -182,8 +200,16 @@ func (s service) saveMaster(c *gin.Context, a actor) {
 			}
 		}
 		if input.ParentID != nil {
+			parentTable := d.parent
+			if d.position {
+				if input.Position == "kaprodi" {
+					parentTable = "study_programs"
+				} else if input.Position == "dekan" {
+					parentTable = "faculties"
+				}
+			}
 			var found int64
-			if err := tx.QueryRowContext(ctx, "SELECT id FROM "+d.parent+" WHERE institution_id=? AND id=?", a.tenant, *input.ParentID).Scan(&found); err != nil {
+			if err := tx.QueryRowContext(ctx, "SELECT id FROM "+parentTable+" WHERE institution_id=? AND id=?", a.tenant, *input.ParentID).Scan(&found); err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					return 0, invalid
 				}
@@ -192,9 +218,13 @@ func (s service) saveMaster(c *gin.Context, a actor) {
 		}
 		fields := []string{"code", "name", "is_active"}
 		values := []any{input.Code, input.Name, *input.Active}
-		if d.parent != "" {
+		if d.parent != "" || d.position {
 			fields = append(fields, "parent_id")
 			values = append(values, input.ParentID)
+		}
+		if d.position {
+			fields = append(fields, "position")
+			values = append(values, input.Position)
 		}
 		if d.email {
 			fields = append(fields, "email")

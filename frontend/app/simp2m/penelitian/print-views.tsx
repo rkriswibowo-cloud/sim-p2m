@@ -29,6 +29,12 @@ type PrintableProposal = {
   ownerEmail?: string;
   proposalYear?: number;
   teamDetails?: { id: number; name: string; code: string; nuptk: string; studyProgram: string; phone: string; email: string }[];
+  officials?: {
+    kaprodi?: { name: string; nuptk: string };
+    dekan?: { name: string; nuptk: string };
+    ketuaLppm?: { name: string; nuptk: string };
+    rektor?: { name: string; nuptk: string };
+  };
   budget: string;
   fieldId: number | null;
   status: string;
@@ -305,7 +311,8 @@ export function PrintPreviewModal({
                       <p>Menyetujui,</p>
                       <p>Ketua Program Studi</p>
                       <div className="h-16" />
-                      <p className="border-t border-dotted border-black pt-1">NUPTK.</p>
+                      <p className="font-semibold">{proposal.officials?.kaprodi?.name || ""}</p>
+                      <p className="border-t border-dotted border-black pt-1">NUPTK. {proposal.officials?.kaprodi?.nuptk || ""}</p>
                     </div>
                     <div>
                       <p>&nbsp;</p>
@@ -318,15 +325,26 @@ export function PrintPreviewModal({
                       <p>Mengetahui,</p>
                       <p>Dekan Fakultas {proposal.ownerFaculty || "......"}</p>
                       <div className="h-16" />
-                      <p className="border-t border-dotted border-black pt-1">NUPTK.</p>
+                      <p className="font-semibold">{proposal.officials?.dekan?.name || ""}</p>
+                      <p className="border-t border-dotted border-black pt-1">NUPTK. {proposal.officials?.dekan?.nuptk || ""}</p>
                     </div>
                     <div>
                       <p>Disahkan,</p>
-                      <p>Plt. Kepala LPPM</p>
+                      <p>Ketua LPPM</p>
                       <div className="h-16" />
-                      <p className="border-t border-dotted border-black pt-1">NUPTK.</p>
+                      <p className="font-semibold">{proposal.officials?.ketuaLppm?.name || ""}</p>
+                      <p className="border-t border-dotted border-black pt-1">NUPTK. {proposal.officials?.ketuaLppm?.nuptk || ""}</p>
                     </div>
                   </div>
+                  {proposal.officials?.rektor && (
+                    <div className="mt-6 text-center">
+                      <p>Mengetahui,</p>
+                      <p>Rektor {institutionName}</p>
+                      <div className="h-16" />
+                      <p className="mx-auto max-w-xs font-semibold">{proposal.officials.rektor.name}</p>
+                      <p className="mx-auto max-w-xs border-t border-dotted border-black pt-1">NUPTK. {proposal.officials.rektor.nuptk}</p>
+                    </div>
+                  )}
                 </div>
               </section>
 

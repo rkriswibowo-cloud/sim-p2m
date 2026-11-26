@@ -18,18 +18,26 @@ const datasets = {
   lecturers: { name: "Dosen", parent: "study-programs", relation: "Program studi", contact: true, phone: true, codeLabel: "Kode dosen / NIDN / NUPTK" },
   students: { name: "Mahasiswa", parent: "study-programs", relation: "Program studi", required: true, contact: true, codeLabel: "NIM" },
   reviewers: { name: "Reviewer", contact: true },
+  officials: { name: "Pejabat pengesahan", position: true, codeLabel: "NUPTK" },
   "funding-sources": { name: "Sumber dana" },
   "scheme-groups": { name: "Kelompok skema" },
   schemes: { name: "Skema", parent: "scheme-groups", relation: "Kelompok skema", required: true, program: true },
   "research-fields": { name: "Bidang riset" },
   "budget-categories": { name: "Kategori RAB" },
   "output-target-years": { name: "Tahun target luaran", codeLabel: "Tahun (angka, misal 2026)" },
-} satisfies Record<string, { name: string; parent?: string; relation?: string; required?: boolean; contact?: boolean; phone?: boolean; program?: boolean; codeLabel?: string }>;
+} satisfies Record<string, { name: string; parent?: string; relation?: string; required?: boolean; contact?: boolean; phone?: boolean; program?: boolean; position?: boolean; codeLabel?: string }>;
+
+const officialPositionLabels: Record<string, string> = {
+  kaprodi: "Ketua Program Studi",
+  dekan: "Dekan Fakultas",
+  ketua_lppm: "Ketua LPPM",
+  rektor: "Rektor",
+};
 
 type Kind = keyof typeof datasets;
-type Dataset = { name: string; parent?: string; relation?: string; required?: boolean; contact?: boolean; phone?: boolean; program?: boolean; codeLabel?: string };
+type Dataset = { name: string; parent?: string; relation?: string; required?: boolean; contact?: boolean; phone?: boolean; program?: boolean; position?: boolean; codeLabel?: string };
 type Institution = { id: number; name: string; canMasterRead: boolean; canMasterManage: boolean };
-type Row = { id: number; code: string; name: string; active: boolean; parentId: number | null; parentName: string; email: string; phone?: string; program?: string };
+type Row = { id: number; code: string; name: string; active: boolean; parentId: number | null; parentName: string; email: string; phone?: string; program?: string; position?: string };
 type Rows = { items: Row[]; next: number };
 type Mode = "production" | "trial-admin" | "trial-reader";
 
@@ -58,6 +66,8 @@ export function MasterDataPanel({ initialKind }: { initialKind?: string }) {
   const [cursors, setCursors] = useState([0]);
   const [result, setResult] = useState<Rows>();
   const [parents, setParents] = useState<Row[]>([]);
+  const [officialUnits, setOfficialUnits] = useState<{ studyPrograms: Row[]; faculties: Row[] }>({ studyPrograms: [], faculties: [] });
+  const [officialPos, setOfficialPos] = useState("kaprodi");
   const [edit, setEdit] = useState<Row>();
   const [adding, setAdding] = useState(false);
   const [revision, setRevision] = useState(0);
@@ -109,6 +119,27 @@ export function MasterDataPanel({ initialKind }: { initialKind?: string }) {
     return () => controller.abort();
   }, [collection, dataset.parent, institution, selected?.canMasterManage]);
 
+  useEffect(() => {
+    if (!institution || !dataset.position || !selected?.canMasterManage) return;
+    const controller = new AbortController();
+    async function loadAll(targetKind: string) {
+      const all: Row[] = [];
+      let after = 0;
+      do {
+        const page = await api<Rows>(`${collection}/${targetKind}?after=${after}`, { signal: controller.signal });
+        all.push(...page.items);
+        after = page.next;
+      } while (after && !controller.signal.aborted);
+      return all;
+    }
+    void Promise.all([loadAll("study-programs"), loadAll("faculties")])
+      .then(([studyPrograms, faculties]) => {
+        if (!controller.signal.aborted) setOfficialUnits({ studyPrograms, faculties });
+      })
+      .catch((err: Error) => { if (!controller.signal.aborted) setError(err.message); });
+    return () => controller.abort();
+  }, [collection, dataset.position, institution, selected?.canMasterManage]);
+
   function resetContext() {
     setResult(undefined);
     setParents([]);
@@ -152,6 +183,7 @@ export function MasterDataPanel({ initialKind }: { initialKind?: string }) {
           email: fields.get("email") || "", parentId: parent ? Number(parent) : null,
           ...(dataset.phone ? { phone: fields.get("phone") || "" } : {}),
           ...(dataset.program ? { program: fields.get("program") || "research" } : {}),
+          ...(dataset.position ? { position: fields.get("position") || "kaprodi" } : {}),
         }),
       });
       form.reset();
@@ -195,7 +227,7 @@ export function MasterDataPanel({ initialKind }: { initialKind?: string }) {
           <h1 className="text-2xl font-semibold tracking-tight">Master Data</h1>
           {mode !== "production" && <p className="mt-1 text-sm font-medium text-brand">Mode trial · database terpisah</p>}
         </div>
-        {selected?.canMasterManage && !accountsView && !adding && !edit && <Button onClick={() => setAdding(true)} disabled={pending}>Tambah data</Button>}
+        {selected?.canMasterManage && !accountsView && !adding && !edit && <Button onClick={() => { setOfficialPos("kaprodi"); setAdding(true); }} disabled={pending}>Tambah data</Button>}
       </header>
       <div className="workspace-toolbar grid gap-2 sm:grid-cols-3">
         {system && <div>
@@ -245,6 +277,23 @@ export function MasterDataPanel({ initialKind }: { initialKind?: string }) {
                 <option value="community">Pengabdian kepada Masyarakat (PKM)</option>
               </select>
             </div>}
+            {dataset.position && <>
+              <div>
+                <label htmlFor="master-position" className="block text-sm">Jabatan</label>
+                <select id="master-position" name="position" value={officialPos} onChange={e => setOfficialPos(e.target.value)} required className="w-full rounded border border-input bg-card p-2">
+                  {Object.entries(officialPositionLabels).map(([val, lbl]) => <option key={val} value={val}>{lbl}</option>)}
+                </select>
+              </div>
+              {(officialPos === "kaprodi" || officialPos === "dekan") && <div>
+                <label htmlFor="master-official-unit" className="block text-sm">{officialPos === "kaprodi" ? "Program Studi" : "Fakultas"}</label>
+                <select id="master-official-unit" name="parent" defaultValue={edit?.parentId ?? ""} className="w-full rounded border border-input bg-card p-2">
+                  <option value="">Semua / Umum</option>
+                  {(officialPos === "kaprodi" ? officialUnits.studyPrograms : officialUnits.faculties).map(u => (
+                    <option key={u.id} value={u.id}>{u.name}{u.active ? "" : " (nonaktif)"}</option>
+                  ))}
+                </select>
+              </div>}
+            </>}
             <label className="flex min-h-8 items-center gap-2"><input type="checkbox" name="active" defaultChecked={edit?.active ?? true} /> Aktif</label>
             <div className="workspace-form-actions">
               <Button type="button" variant="outline" disabled={pending} onClick={() => { setEdit(undefined); setAdding(false); }}>Batal</Button>
@@ -276,11 +325,11 @@ export function MasterDataPanel({ initialKind }: { initialKind?: string }) {
           {result?.items.length === 0 && <p className="text-sm">Tidak ada data yang cocok.</p>}
           {!!result?.items.length && <div className="overflow-x-auto">
             <table className="workspace-table w-full text-left text-sm">
-              <thead><tr><th>Kode</th><th>Nama</th>{dataset.parent && <th>{dataset.relation}</th>}{dataset.phone && <th>Nomor HP</th>}{dataset.program && <th>Program</th>}<th>Status</th>{selected?.canMasterManage && <th>Aksi</th>}</tr></thead>
+              <thead><tr><th>{dataset.codeLabel ?? "Kode"}</th><th>Nama</th>{dataset.parent && <th>{dataset.relation}</th>}{dataset.position && <><th>Jabatan</th><th>Unit (Prodi/Fakultas)</th></>}{dataset.phone && <th>Nomor HP</th>}{dataset.program && <th>Program</th>}<th>Status</th>{selected?.canMasterManage && <th>Aksi</th>}</tr></thead>
               <tbody>{result.items.map(row => <tr key={row.id}>
-                <td className="break-words">{row.code}</td><td className="break-words">{row.name}</td>{dataset.parent && <td>{row.parentName || "–"}</td>}{dataset.phone && <td className="break-words">{row.phone || "–"}</td>}{dataset.program && <td>{row.program === "community" ? "Pengabdian (PKM)" : "Penelitian"}</td>}<td><span className="workspace-status" data-active={row.active}>{row.active ? "Aktif" : "Nonaktif"}</span></td>
+                <td className="break-words">{row.code}</td><td className="break-words">{row.name}</td>{dataset.parent && <td>{row.parentName || "–"}</td>}{dataset.position && <><td>{officialPositionLabels[row.position ?? ""] ?? (row.position || "–")}</td><td>{row.parentName || "Institusi"}</td></>}{dataset.phone && <td className="break-words">{row.phone || "–"}</td>}{dataset.program && <td>{row.program === "community" ? "Pengabdian (PKM)" : "Penelitian"}</td>}<td><span className="workspace-status" data-active={row.active}>{row.active ? "Aktif" : "Nonaktif"}</span></td>
                 {selected?.canMasterManage && <td><div className="flex flex-wrap gap-1.5">
-                  <Button type="button" variant="outline" size="sm" aria-label={`Ubah ${row.name}`} disabled={pending} onClick={() => { setAdding(false); setEdit(row); }}>Ubah</Button>
+                  <Button type="button" variant="outline" size="sm" aria-label={`Ubah ${row.name}`} disabled={pending} onClick={() => { setAdding(false); setOfficialPos(row.position || "kaprodi"); setEdit(row); }}>Ubah</Button>
                   {row.active && <Button type="button" variant="ghost" size="icon-sm" className="text-destructive" title="Hapus" aria-label={`Hapus ${row.name}`} disabled={pending} onClick={() => void remove(row)}><Trash2 size={15} aria-hidden="true" /></Button>}
                 </div></td>}
               </tr>)}</tbody>

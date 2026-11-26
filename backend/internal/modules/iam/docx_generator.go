@@ -33,6 +33,7 @@ type docxMeta struct {
 	OwnerPhone      string
 	OwnerUnit       string
 	OwnerFaculty    string
+	Officials       proposalOfficials
 	Lecturers       map[int64]personDetail
 	Students        map[int64]personDetail
 }
@@ -72,11 +73,13 @@ func (s service) loadProposalDocxMeta(ctx context.Context, a actor, id int64) (d
 		return meta, err
 	}
 
-	_ = s.db.QueryRowContext(ctx, `SELECT l.code, COALESCE(NULLIF(l.nuptk,''),l.code), COALESCE(sp.name,'-'), COALESCE(f.name,'-'), COALESCE(l.phone,'-')
+	var ownerSPID, ownerFacID int64
+	_ = s.db.QueryRowContext(ctx, `SELECT l.code, COALESCE(NULLIF(l.nuptk,''),l.code), COALESCE(sp.name,'-'), COALESCE(f.name,'-'), COALESCE(l.phone,'-'), COALESCE(sp.id,0), COALESCE(f.id,0)
  FROM lecturers l
  LEFT JOIN study_programs sp ON sp.institution_id=l.institution_id AND sp.id=l.parent_id
  LEFT JOIN faculties f ON f.institution_id=sp.institution_id AND f.id=sp.parent_id
- WHERE l.institution_id=? AND (l.user_id=? OR (l.user_id IS NULL AND l.email=?)) LIMIT 1`, a.tenant, a.ID, meta.OwnerEmail).Scan(&meta.OwnerCode, &meta.OwnerNuptk, &meta.OwnerUnit, &meta.OwnerFaculty, &meta.OwnerPhone)
+ WHERE l.institution_id=? AND (l.user_id=? OR (l.user_id IS NULL AND l.email=?)) LIMIT 1`, a.tenant, a.ID, meta.OwnerEmail).Scan(&meta.OwnerCode, &meta.OwnerNuptk, &meta.OwnerUnit, &meta.OwnerFaculty, &meta.OwnerPhone, &ownerSPID, &ownerFacID)
+	meta.Officials = loadProposalOfficials(ctx, s.db, a.tenant, ownerSPID, ownerFacID)
 
 	if len(prop.Data.Team) > 0 {
 		lRows, err := s.db.QueryContext(ctx, `SELECT l.id, l.name, l.code, COALESCE(NULLIF(l.nuptk,''),l.code), COALESCE(sp.name,'-'), COALESCE(l.phone,'-'), COALESCE(l.email,'-')
@@ -491,15 +494,35 @@ func (s service) exportProposalDocx(c *gin.Context, a actor) {
 	approvalRows = append(approvalRows, []string{"Luaran yang dijanjikan", ": " + outputList})
 	body.WriteString(docxTable([]string{"Komponen", "Keterangan"}, approvalRows, []int{3200, 5800}))
 
+	kaprodiName, kaprodiNuptk := "____________________________", "NUPTK."
+	if meta.Officials.Kaprodi != nil {
+		kaprodiName = meta.Officials.Kaprodi.Name
+		kaprodiNuptk = "NUPTK. " + meta.Officials.Kaprodi.NUPTK
+	}
+	dekanName, dekanNuptk := "____________________________", "NUPTK."
+	if meta.Officials.Dekan != nil {
+		dekanName = meta.Officials.Dekan.Name
+		dekanNuptk = "NUPTK. " + meta.Officials.Dekan.NUPTK
+	}
+	lppmName, lppmNuptk := "____________________________", "NUPTK."
+	if meta.Officials.KetuaLPPM != nil {
+		lppmName = meta.Officials.KetuaLPPM.Name
+		lppmNuptk = "NUPTK. " + meta.Officials.KetuaLPPM.NUPTK
+	}
 	body.WriteString(docxParagraph("Sidoarjo, "+formatIndonesianDate(time.Now()), false, 22, "right", 160))
 	body.WriteString(docxTable([]string{"Menyetujui,\nKetua Program Studi", "Ketua Peneliti"}, [][]string{
-		{"\n\n\n____________________________", "\n\n\n" + p.Owner},
-		{"NUPTK.", "NUPTK. " + meta.OwnerNuptk},
+		{"\n\n\n" + kaprodiName, "\n\n\n" + p.Owner},
+		{kaprodiNuptk, "NUPTK. " + meta.OwnerNuptk},
 	}, []int{4500, 4500}))
-	body.WriteString(docxTable([]string{"Mengetahui,\nDekan Fakultas " + meta.OwnerFaculty, "Disahkan,\nPlt. Kepala LPPM"}, [][]string{
-		{"\n\n\n____________________________", "\n\n\n____________________________"},
-		{"NUPTK.", "NUPTK."},
+	body.WriteString(docxTable([]string{"Mengetahui,\nDekan Fakultas " + meta.OwnerFaculty, "Disahkan,\nKetua LPPM"}, [][]string{
+		{"\n\n\n" + dekanName, "\n\n\n" + lppmName},
+		{dekanNuptk, lppmNuptk},
 	}, []int{4500, 4500}))
+	if meta.Officials.Rektor != nil {
+		body.WriteString(docxParagraph("Mengetahui,\nRektor "+meta.InstitutionName, false, 22, "center", 360))
+		body.WriteString(docxParagraph(meta.Officials.Rektor.Name, true, 22, "center", 40))
+		body.WriteString(docxParagraph("NUPTK. "+meta.Officials.Rektor.NUPTK, false, 22, "center", 160))
+	}
 
 	// Identitas
 	body.WriteString(docxHeading("IDENTITAS DAN URAIAN UMUM", "center", true))

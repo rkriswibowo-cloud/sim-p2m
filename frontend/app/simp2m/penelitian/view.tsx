@@ -30,6 +30,12 @@ type Proposal = {
   revision: number; budget: string; scheme: string; period: string; owner: string;
   ownerNuptk?: string; ownerStudyProgram?: string; ownerFaculty?: string; ownerPhone?: string; ownerEmail?: string; proposalYear?: number;
   teamDetails?: { id: number; name: string; code: string; nuptk: string; studyProgram: string; phone: string; email: string }[];
+  officials?: {
+    kaprodi?: { name: string; nuptk: string };
+    dekan?: { name: string; nuptk: string };
+    ketuaLppm?: { name: string; nuptk: string };
+    rektor?: { name: string; nuptk: string };
+  };
   updatedAt: string; data: ProposalData;
   roadmapImage: boolean; methodImage: boolean; studentLetterFile?: boolean;
   periodId: number; schemeId: number; grantVersion: number; requiresVerification: boolean;
