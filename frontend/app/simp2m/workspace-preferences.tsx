@@ -1,14 +1,19 @@
 "use client";
 
 import { createContext, useContext, useState, useSyncExternalStore } from "react";
+import type { Palette } from "./workspace-palettes";
 
 export type Theme = "dark" | "light" | "system";
+export type { Palette };
+
 type Preferences = {
   theme: Theme;
   appearance: "dark" | "light";
   collapsed: boolean;
   iconColor: string;
+  palette: Palette;
   saveIconColor: (color: string) => void;
+  savePalette: (palette: Palette) => void;
   save: (theme: Theme, collapsed: boolean) => void;
 };
 
@@ -27,11 +32,12 @@ function subscribe(callback: () => void) {
   return () => media.removeEventListener("change", callback);
 }
 
-export function WorkspacePreferences({ initialTheme, initialCollapsed, initialIconColor, children }: {
-  initialTheme: Theme; initialCollapsed: boolean; initialIconColor?: string; children: React.ReactNode;
+export function WorkspacePreferences({ initialTheme, initialCollapsed, initialIconColor, initialPalette, children }: {
+  initialTheme: Theme; initialCollapsed: boolean; initialIconColor?: string; initialPalette?: Palette; children: React.ReactNode;
 }) {
   const [theme, setTheme] = useState(initialTheme);
   const [collapsed, setCollapsed] = useState(initialCollapsed);
+  const [palette, setPalette] = useState<Palette>(initialPalette ?? "slate");
   const [iconColor, setIconColor] = useState(() =>
     initialIconColor && hexColor.test(initialIconColor) ? initialIconColor : "");
   const systemDark = useSyncExternalStore(subscribe, () => window.matchMedia(systemQuery).matches, () => true);
@@ -50,7 +56,16 @@ export function WorkspacePreferences({ initialTheme, initialCollapsed, initialIc
     preferenceCookie("simp2m_icon_color", color ? color.slice(1) : "", color ? 31536000 : 0);
   }
 
-  return <PreferencesContext.Provider value={{ theme, appearance, collapsed, iconColor, saveIconColor, save }}>{children}</PreferencesContext.Provider>;
+  function savePalette(nextPalette: Palette) {
+    setPalette(nextPalette);
+    preferenceCookie("simp2m_palette", nextPalette);
+  }
+
+  return (
+    <PreferencesContext.Provider value={{ theme, appearance, collapsed, iconColor, palette, saveIconColor, savePalette, save }}>
+      {children}
+    </PreferencesContext.Provider>
+  );
 }
 
 export function useWorkspacePreferences() {

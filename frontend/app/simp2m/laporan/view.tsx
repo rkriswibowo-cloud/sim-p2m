@@ -1,6 +1,6 @@
 "use client";
 
-import { CircleCheck, ClipboardList, Download, Eye, Pencil, Plus, Save, Trash2, Upload, Wallet } from "lucide-react";
+import { CircleCheck, ClipboardList, Download, Eye, Pencil, Plus, Printer, Save, Trash2, Upload, Wallet } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { toast } from "sonner";
@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { confirmRemoval, workspaceToastOptions } from "../confirm-removal";
 import { FinalAttachments } from "./final-attachments";
+import { FinalReportPrintModal, type PrintableFinalReport } from "./final-print-modal";
+import { ProgressReportPrintModal, type PrintableProgressReport } from "./progress-print-modal";
 
 const sections = {
   progress: [
@@ -31,7 +33,19 @@ type Row = {
   data: Record<string, string>; source: Record<string, string>;
   allowProgressReport?: boolean; allowFinalReport?: boolean; progressUploaded?: boolean;
   outputTargets?: OutputTarget[] | null; outputProgress?: OutputProgress[] | null;
-  owner: string; scheme: string; year: number; team: string[]; methodDiagram: boolean; poster: boolean;
+  owner: string; ownerNuptk?: string; ownerStudyProgram?: string; ownerFaculty?: string;
+  ownerPhone?: string; ownerEmail?: string;
+  officials?: {
+    kaprodi?: { name: string; nuptk: string };
+    dekan?: { name: string; nuptk: string };
+    ketuaLppm?: { name: string; nuptk: string };
+  };
+  scheme: string; year: number; proposalYear?: number;
+  budget?: string;
+  costs?: { category?: string; item?: string; quantity?: string | number; price?: string | number }[] | null;
+  team: string[];
+  teamDetails?: { id: number; name: string; code: string; nuptk: string; studyProgram: string; phone: string; email: string }[];
+  methodDiagram: boolean; poster: boolean;
 };
 type Editor = Omit<Row, "kind"> & { kind: Kind };
 
@@ -45,8 +59,14 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-type Summary = { submitted: number; disbursed: number; completed: number; institutionWide: boolean; proposedBudget: string };
-type SubmissionPage = { items: { id: number; lecturer: string; title: string; budget: string }[]; hasNext: boolean; start: number };
+type Summary = { submitted: number; disbursed: number; completed: number; institutionWide: boolean; proposedBudget: string; years?: number[] };
+type SubmissionItem = { id: number; lecturer: string; title: string; scheme?: string; year?: number; workflowStatus?: string; fundingDecision?: string; submittedAt?: string; budget: string };
+type SubmissionPage = { items: SubmissionItem[]; hasNext: boolean; start: number };
+const statusText: Record<string, string> = {
+  draft: "Draf", submitted: "Terkirim", verified: "Terverifikasi", in_review: "Direview",
+  reviewed: "Selesai Review", revision: "Perlu Revisi", decided: "Diputuskan",
+  funded: "Didanai", rejected: "Ditolak", pending: "Menunggu",
+};
 const metrics = [
   { key: "submitted", label: "Pengajuan", description: "Usulan yang sudah dikirim", icon: ClipboardList, tone: "blue" },
   { key: "disbursed", label: "Sudah cair", description: "Minimal satu tahap dana ditransfer", icon: Wallet, tone: "amber" },
@@ -55,17 +75,19 @@ const metrics = [
 const numberFormat = new Intl.NumberFormat("id-ID");
 const rupiah = new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 });
 
-function SubmissionHistory({ endpoint, total }: { endpoint: string; total?: string }) {
+function SubmissionHistory({ endpoint, total, year }: { endpoint: string; total?: string; year: string }) {
   const [page, setPage] = useState(1);
   const [data, setData] = useState<SubmissionPage>();
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
-    void request<SubmissionPage>(`${endpoint}/submissions?page=${page}`, { signal: controller.signal })
+    const qs = new URLSearchParams({ page: String(page) });
+    if (year) qs.set("year", year);
+    void request<SubmissionPage>(`${endpoint}/submissions?${qs.toString()}`, { signal: controller.signal })
       .then(result => { if (!controller.signal.aborted) setData(result); })
       .catch(() => { if (!controller.signal.aborted) setFailed(true); });
     return () => controller.abort();
-  }, [endpoint, page]);
+  }, [endpoint, page, year]);
 
   function move(next: number) {
     setData(undefined);
@@ -75,7 +97,10 @@ function SubmissionHistory({ endpoint, total }: { endpoint: string; total?: stri
 
   return <Card className="workspace-panel rounded-md">
     <CardHeader className="flex flex-wrap items-start justify-between gap-2 sm:flex-row">
-      <CardTitle>Riwayat Pengajuan Dosen</CardTitle>
+      <div>
+        <CardTitle>Riwayat Pengajuan Dosen</CardTitle>
+        <p className="mt-1 text-xs text-muted-foreground">{year ? `Menampilkan usulan tahun anggaran ${year}` : "Menampilkan seluruh tahun anggaran"}</p>
+      </div>
       <dl className="rounded-md border border-border bg-muted/40 px-3 py-2 sm:text-right">
         <dt className="text-xs text-muted-foreground">Total RAB seluruh usulan yang ditampilkan dalam rekap</dt>
         <dd className="font-semibold tabular-nums">{total === undefined ? "–" : rupiah.format(BigInt(total))}</dd>
@@ -84,17 +109,34 @@ function SubmissionHistory({ endpoint, total }: { endpoint: string; total?: stri
     <CardContent className="space-y-3">
       {failed && <p role="alert" className="text-sm text-destructive">Riwayat pengajuan gagal dimuat.</p>}
       {!failed && !data && <p role="status" className="text-sm text-muted-foreground">Memuat riwayat pengajuan…</p>}
-      {data?.items.length === 0 && <p className="text-sm text-muted-foreground">Belum ada usulan pada halaman ini.</p>}
+      {data?.items.length === 0 && <p className="text-sm text-muted-foreground">Belum ada usulan pada filter ini.</p>}
       {!!data?.items.length && <div className="overflow-x-auto">
-        <table className="workspace-table w-full min-w-[34rem] text-left text-sm" aria-label="Riwayat Pengajuan Dosen">
+        <table className="workspace-table w-full min-w-[44rem] text-left text-sm" aria-label="Riwayat Pengajuan Dosen">
           <thead><tr>
-            <th scope="col" className="w-12">No.</th><th scope="col">Nama Dosen</th>
-            <th scope="col">Judul Usulan</th><th scope="col" className="text-right">Total RAB</th>
+            <th scope="col" className="w-12">No.</th>
+            <th scope="col">Tahun</th>
+            <th scope="col">Nama Dosen</th>
+            <th scope="col">Judul Usulan</th>
+            <th scope="col">Skema</th>
+            <th scope="col">Status</th>
+            <th scope="col" className="text-right">Total RAB</th>
           </tr></thead>
-          <tbody>{data.items.map((item, index) => <tr key={item.id}>
-            <td className="tabular-nums">{data.start + index}</td><td>{item.lecturer}</td>
-            <td className="wrap-anywhere">{item.title}</td><td className="whitespace-nowrap text-right tabular-nums">{rupiah.format(BigInt(item.budget))}</td>
-          </tr>)}</tbody>
+          <tbody>{data.items.map((item, index) => {
+            const decision = item.fundingDecision && item.fundingDecision !== "pending" ? item.fundingDecision : item.workflowStatus;
+            return <tr key={item.id}>
+              <td className="tabular-nums">{data.start + index}</td>
+              <td className="whitespace-nowrap tabular-nums">{item.year || "–"}</td>
+              <td>{item.lecturer}</td>
+              <td className="wrap-anywhere">{item.title}</td>
+              <td>{item.scheme || "–"}</td>
+              <td className="whitespace-nowrap">
+                <span className="workspace-status" data-active={item.fundingDecision === "funded" ? "true" : undefined}>
+                  {(decision && statusText[decision]) || decision || "–"}
+                </span>
+              </td>
+              <td className="whitespace-nowrap text-right tabular-nums">{rupiah.format(BigInt(item.budget))}</td>
+            </tr>;
+          })}</tbody>
         </table>
       </div>}
       {(page > 1 || data?.hasNext) && <div className="flex flex-wrap items-center justify-between gap-2">
@@ -109,20 +151,36 @@ function SubmissionHistory({ endpoint, total }: { endpoint: string; total?: stri
 }
 
 function ReportSummary({ endpoint }: { endpoint: string }) {
+  const [year, setYear] = useState("");
   const [summary, setSummary] = useState<Summary>();
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
-    void request<Summary>(endpoint + "/summary", { signal: controller.signal })
+    const qs = year ? `?year=${encodeURIComponent(year)}` : "";
+    void request<Summary>(`${endpoint}/summary${qs}`, { signal: controller.signal })
       .then(data => { if (!controller.signal.aborted) setSummary(data); })
       .catch(() => { if (!controller.signal.aborted) setFailed(true); });
     return () => controller.abort();
-  }, [endpoint]);
+  }, [endpoint, year]);
 
   return <section aria-labelledby="report-summary-title" className="space-y-3">
-    <div className="flex flex-wrap items-baseline justify-between gap-1">
-      <h2 id="report-summary-title" className="text-base font-semibold">Rekap usulan penelitian</h2>
-      {summary && <p className="text-xs text-muted-foreground">{summary.institutionWide ? "Seluruh usulan institusi" : "Usulan saya"}</p>}
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div>
+        <h2 id="report-summary-title" className="text-base font-semibold">Rekap usulan penelitian</h2>
+        {summary && <p className="text-xs text-muted-foreground">{summary.institutionWide ? "Seluruh usulan institusi" : "Usulan saya"}</p>}
+      </div>
+      <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+        Tahun
+        <select
+          aria-label="Filter tahun rekap usulan"
+          value={year}
+          onChange={event => { setSummary(undefined); setFailed(false); setYear(event.target.value); }}
+          className="h-8 rounded-md border border-input bg-card px-2.5 text-xs text-foreground"
+        >
+          <option value="">Semua Tahun</option>
+          {(summary?.years ?? []).map(y => <option key={y} value={String(y)}>{y}</option>)}
+        </select>
+      </label>
     </div>
     {failed ? <p role="alert" className="text-sm text-destructive">Rekap usulan gagal dimuat.</p> :
       <div className="grid gap-3 sm:grid-cols-3" aria-busy={!summary}>
@@ -137,7 +195,7 @@ function ReportSummary({ endpoint }: { endpoint: string }) {
           </CardContent>
         </Card>)}
       </div>}
-    <SubmissionHistory endpoint={endpoint} total={summary?.proposedBudget} />
+    <SubmissionHistory key={year} endpoint={endpoint} total={summary?.proposedBudget} year={year} />
   </section>;
 }
 
@@ -145,9 +203,12 @@ export function ReportsPanel({ institutions, onlyKind }: { institutions: { id: n
   const [tenant, setTenant] = useState(institutions[0]?.id ?? 0);
   const [items, setItems] = useState<Row[]>();
   const [editor, setEditor] = useState<Editor>();
+  const [printing, setPrinting] = useState<PrintableProgressReport | null>(null);
+  const [printingFinal, setPrintingFinal] = useState<PrintableFinalReport | null>(null);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const [refresh, setRefresh] = useState(0);
+  const institutionName = institutions.find(item => item.id === tenant)?.name ?? "Universitas Anwar Medika";
   const endpoint = `/api/v1/iam/institutions/${tenant}/reports`;
   const proposals = [...new Map(items?.map(row => [row.proposalId, row])).values()];
 
@@ -237,7 +298,7 @@ export function ReportsPanel({ institutions, onlyKind }: { institutions: { id: n
           <h3 className="text-sm font-semibold">Identitas sampul dan halaman pengesahan</h3>
           <dl className="grid gap-2 text-sm sm:grid-cols-2">
             {[["Judul penelitian", editor.title], ["Ketua peneliti", editor.owner], ["Anggota", editor.team?.join(", ") || "–"],
-              ["Skema dan tahun", `${editor.scheme} · ${editor.year}`]].map(([label, value]) => <div className="min-w-0" key={label}>
+            ["Skema dan tahun", `${editor.scheme} · ${editor.year}`]].map(([label, value]) => <div className="min-w-0" key={label}>
               <dt className="text-xs text-muted-foreground">{label}</dt><dd className="wrap-anywhere">{value}</dd>
             </div>)}
           </dl>
@@ -264,6 +325,16 @@ export function ReportsPanel({ institutions, onlyKind }: { institutions: { id: n
           onUpload={uploading => { setPending(uploading); if (!uploading) setRefresh(value => value + 1); }} />}
         <div className="flex flex-wrap gap-2">
           <Button data-action-tone="positive" type="submit" disabled={pending}><Save size={15} aria-hidden="true" /> Simpan draf</Button>
+          {editor.kind === "progress" && (
+            <Button data-action-tone="info" type="button" variant="outline" disabled={pending} onClick={() => setPrinting(editor)}>
+              <Printer size={15} aria-hidden="true" /> Pratinjau Cetak / PDF
+            </Button>
+          )}
+          {editor.kind === "final" && (
+            <Button data-action-tone="info" type="button" variant="outline" disabled={pending} onClick={() => setPrintingFinal(editor)}>
+              <Printer size={15} aria-hidden="true" /> Pratinjau Cetak / PDF
+            </Button>
+          )}
           <Button type="button" variant="outline" disabled={pending} onClick={() => { setEditor(undefined); setError(""); }}>Batal</Button>
         </div>
       </form></CardContent>
@@ -296,7 +367,41 @@ export function ReportsPanel({ institutions, onlyKind }: { institutions: { id: n
                     </div>}
                     {!enabled && <p className="text-xs text-muted-foreground">Belum diaktifkan Admin/Superadmin</p>}
                   </div>
-                  <div className="flex gap-1">
+                  <div className="flex flex-wrap gap-1">
+                    {kind === "progress" && (
+                      <Button
+                        data-action-tone="info"
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={pending}
+                        onClick={() => setPrinting({
+                          ...(existing ?? proposal),
+                          data: existing?.data ?? Object.fromEntries(sections.progress.map(([key]) => [key, proposal.source[key] ?? ""])),
+                          outputTargets: proposal.outputTargets,
+                          outputProgress: existing?.outputProgress ?? proposal.outputProgress,
+                        })}
+                        aria-label={`Pratinjau cetak ${labels[kind]}`}
+                      >
+                        <Printer size={15} aria-hidden="true" /> Cetak / PDF
+                      </Button>
+                    )}
+                    {kind === "final" && (
+                      <Button
+                        data-action-tone="info"
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={pending}
+                        onClick={() => setPrintingFinal({
+                          ...(existing ?? proposal),
+                          data: existing?.data ?? Object.fromEntries(sections.final.map(([key]) => [key, proposal.source[key] ?? ""])),
+                        })}
+                        aria-label={`Pratinjau cetak ${labels[kind]}`}
+                      >
+                        <Printer size={15} aria-hidden="true" /> Cetak / PDF
+                      </Button>
+                    )}
                     <Button data-action-tone={existing ? "edit" : "positive"} type="button" variant="ghost" size="sm" disabled={pending || !enabled} onClick={() => open(proposal, kind)} aria-label={`${existing ? "Ubah" : "Buat"} ${labels[kind]}`}>
                       {existing ? <Pencil size={15} aria-hidden="true" /> : <Plus size={15} aria-hidden="true" />} {existing ? "Ubah draf" : "Buat draf"}
                     </Button>
@@ -310,6 +415,22 @@ export function ReportsPanel({ institutions, onlyKind }: { institutions: { id: n
         </ul>}
       </CardContent>
     </Card>}
+    {printing && (
+      <ProgressReportPrintModal
+        report={printing}
+        institutionName={institutionName}
+        methodDiagramUrl={`${endpoint}/${printing.proposalId}/method-diagram`}
+        onClose={() => setPrinting(null)}
+      />
+    )}
+    {printingFinal && (
+      <FinalReportPrintModal
+        report={printingFinal}
+        institutionName={institutionName}
+        reportEndpoint={`${endpoint}/${printingFinal.proposalId}`}
+        onClose={() => setPrintingFinal(null)}
+      />
+    )}
   </section>;
 }
 

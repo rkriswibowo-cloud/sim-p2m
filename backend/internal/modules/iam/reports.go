@@ -94,22 +94,47 @@ func (s service) reportScope(c *gin.Context, a actor) (bool, string, []any) {
 }
 
 func (s service) reportSummary(c *gin.Context, a actor) {
-	institutionWide, where, args := s.reportScope(c, a)
+	ctx := c.Request.Context()
+	institutionWide, baseWhere, baseArgs := s.reportScope(c, a)
+	year, _ := strconv.ParseInt(c.Query("year"), 10, 64)
+	where := baseWhere
+	args := append([]any(nil), baseArgs...)
+	if year > 0 {
+		where += " AND g.fiscal_year=?"
+		args = append(args, year)
+	}
 	var submitted, disbursed, completed int
 	var proposedBudget string
-	err := s.db.QueryRowContext(c.Request.Context(), `SELECT COUNT(*),
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*),
  COUNT(CASE WHEN EXISTS (SELECT 1 FROM project_disbursements d
  WHERE d.institution_id=p.institution_id AND d.project_id=pr.id AND d.status='transferred') THEN 1 END),
  COUNT(CASE WHEN pr.status='completed' THEN 1 END),
  CAST(COALESCE(SUM(p.budget_idr),0) AS CHAR)
- FROM research_proposals p LEFT JOIN research_projects pr
- ON pr.institution_id=p.institution_id AND pr.proposal_id=p.id
+ FROM research_proposals p
+ JOIN grant_scheme_versions v ON v.institution_id=p.institution_id AND v.id=p.grant_version_id
+ JOIN grant_periods g ON g.institution_id=v.institution_id AND g.id=v.period_id
+ LEFT JOIN research_projects pr ON pr.institution_id=p.institution_id AND pr.proposal_id=p.id
  WHERE `+where, args...).Scan(&submitted, &disbursed, &completed, &proposedBudget)
 	if err != nil {
 		c.Status(503)
 		return
 	}
-	c.JSON(200, gin.H{"submitted": submitted, "disbursed": disbursed, "completed": completed, "institutionWide": institutionWide, "proposedBudget": proposedBudget})
+	years := []int{}
+	yrRows, yrErr := s.db.QueryContext(ctx, `SELECT DISTINCT g.fiscal_year
+ FROM research_proposals p
+ JOIN grant_scheme_versions v ON v.institution_id=p.institution_id AND v.id=p.grant_version_id
+ JOIN grant_periods g ON g.institution_id=v.institution_id AND g.id=v.period_id
+ WHERE `+baseWhere+` ORDER BY g.fiscal_year DESC`, baseArgs...)
+	if yrErr == nil {
+		defer yrRows.Close()
+		for yrRows.Next() {
+			var y int
+			if yrRows.Scan(&y) == nil {
+				years = append(years, y)
+			}
+		}
+	}
+	c.JSON(200, gin.H{"submitted": submitted, "disbursed": disbursed, "completed": completed, "institutionWide": institutionWide, "proposedBudget": proposedBudget, "years": years})
 }
 
 func (s service) reportSubmissions(c *gin.Context, a actor) {
@@ -119,10 +144,18 @@ func (s service) reportSubmissions(c *gin.Context, a actor) {
 		c.Status(400)
 		return
 	}
+	year, _ := strconv.ParseInt(c.Query("year"), 10, 64)
 	_, where, args := s.reportScope(c, a)
+	if year > 0 {
+		where += " AND g.fiscal_year=?"
+		args = append(args, year)
+	}
 	rows, err := s.db.QueryContext(c.Request.Context(), `SELECT p.id, COALESCE(NULLIF(l.name,''),u.display_name),
- p.title, CAST(p.budget_idr AS CHAR)
+ p.title, v.scheme_name, g.fiscal_year, p.workflow_status, p.funding_decision,
+ COALESCE(DATE_FORMAT(p.submitted_at, '%Y-%m-%d'), ''), CAST(p.budget_idr AS CHAR)
  FROM research_proposals p JOIN users u ON u.id=p.owner_user_id
+ JOIN grant_scheme_versions v ON v.institution_id=p.institution_id AND v.id=p.grant_version_id
+ JOIN grant_periods g ON g.institution_id=v.institution_id AND g.id=v.period_id
  LEFT JOIN lecturers l ON l.institution_id=p.institution_id AND l.user_id=p.owner_user_id
  WHERE `+where+` ORDER BY p.submitted_at DESC,p.id DESC LIMIT ? OFFSET ?`,
 		append(args, pageSize+1, (page-1)*pageSize)...)
@@ -132,15 +165,20 @@ func (s service) reportSubmissions(c *gin.Context, a actor) {
 	}
 	defer rows.Close()
 	type submission struct {
-		ID       int64  `json:"id"`
-		Lecturer string `json:"lecturer"`
-		Title    string `json:"title"`
-		Budget   string `json:"budget"`
+		ID              int64  `json:"id"`
+		Lecturer        string `json:"lecturer"`
+		Title           string `json:"title"`
+		Scheme          string `json:"scheme"`
+		Year            int    `json:"year"`
+		WorkflowStatus  string `json:"workflowStatus"`
+		FundingDecision string `json:"fundingDecision"`
+		SubmittedAt     string `json:"submittedAt"`
+		Budget          string `json:"budget"`
 	}
 	items := []submission{}
 	for rows.Next() {
 		var item submission
-		if err := rows.Scan(&item.ID, &item.Lecturer, &item.Title, &item.Budget); err != nil {
+		if err := rows.Scan(&item.ID, &item.Lecturer, &item.Title, &item.Scheme, &item.Year, &item.WorkflowStatus, &item.FundingDecision, &item.SubmittedAt, &item.Budget); err != nil {
 			c.Status(503)
 			return
 		}
@@ -158,7 +196,8 @@ func (s service) reportSubmissions(c *gin.Context, a actor) {
 }
 
 func (s service) listReports(c *gin.Context, a actor) {
-	rows, err := s.db.QueryContext(c.Request.Context(), `SELECT p.id,p.title,
+	ctx := c.Request.Context()
+	rows, err := s.db.QueryContext(ctx, `SELECT p.id,p.title,
  COALESCE(r.kind,''),COALESCE(r.revision,0),COALESCE(JSON_REMOVE(r.payload,'$.outputProgress'),'{}'),
  COALESCE(JSON_EXTRACT(r.payload,'$.outputProgress'),'[]'),COALESCE(JSON_EXTRACT(p.payload,'$.outputs'),'[]'),
  JSON_OBJECT('introduction',COALESCE(JSON_UNQUOTE(JSON_EXTRACT(p.payload,'$.introduction')),''),
@@ -167,14 +206,28 @@ func (s service) listReports(c *gin.Context, a actor) {
  'references',COALESCE(JSON_UNQUOTE(JSON_EXTRACT(p.payload,'$.references')),'')),
  g.allow_progress_report, g.allow_final_report,
  EXISTS (SELECT 1 FROM progress_report_uploads f WHERE f.proposal_id=p.id),
- COALESCE(NULLIF(l.name,''),u.display_name),v.scheme_name,g.project_year,
+ COALESCE(NULLIF(l.name,''),u.display_name),
+ COALESCE(NULLIF(l.nuptk,''),COALESCE(l.code,'')),
+ COALESCE(sp.name,''),
+ COALESCE(f.name,''),
+ COALESCE(l.phone,''),
+ COALESCE(NULLIF(l.email,''),u.email),
+ COALESCE(sp.id,0),
+ COALESCE(f.id,0),
+ v.scheme_name,g.project_year,g.proposal_year,
+ CAST(p.budget_idr AS CHAR),COALESCE(JSON_EXTRACT(p.payload,'$.costs'),'[]'),
  COALESCE((SELECT JSON_ARRAYAGG(t.name ORDER BY t.id) FROM lecturers t
+ WHERE t.institution_id=p.institution_id AND JSON_CONTAINS(JSON_EXTRACT(p.payload,'$.team'),JSON_OBJECT('id',t.id))), '[]'),
+ COALESCE((SELECT JSON_ARRAYAGG(JSON_OBJECT('id',t.id,'name',t.name,'code',COALESCE(t.code,''),'nuptk',COALESCE(NULLIF(t.nuptk,''),COALESCE(t.code,'')),'studyProgram',COALESCE(tsp.name,'-'),'phone',COALESCE(t.phone,''),'email',COALESCE(t.email,'')) ORDER BY t.id)
+ FROM lecturers t LEFT JOIN study_programs tsp ON tsp.institution_id=t.institution_id AND tsp.id=t.parent_id
  WHERE t.institution_id=p.institution_id AND JSON_CONTAINS(JSON_EXTRACT(p.payload,'$.team'),JSON_OBJECT('id',t.id))), '[]'),
  EXISTS (SELECT 1 FROM research_proposal_images i WHERE i.proposal_id=p.id AND i.kind='method'),
  EXISTS (SELECT 1 FROM research_proposal_images i WHERE i.proposal_id=p.id AND i.kind='poster')
  FROM research_proposals p
  JOIN users u ON u.id=p.owner_user_id
- LEFT JOIN lecturers l ON l.institution_id=p.institution_id AND l.user_id=p.owner_user_id
+ LEFT JOIN lecturers l ON l.institution_id=p.institution_id AND (l.user_id=p.owner_user_id OR (l.user_id IS NULL AND l.email=u.email))
+ LEFT JOIN study_programs sp ON sp.institution_id=l.institution_id AND sp.id=l.parent_id
+ LEFT JOIN faculties f ON f.institution_id=sp.institution_id AND f.id=sp.parent_id
  JOIN grant_scheme_versions v ON v.institution_id=p.institution_id AND v.id=p.grant_version_id
  JOIN grant_periods g ON g.institution_id=v.institution_id AND g.id=v.period_id
  LEFT JOIN research_reports r ON r.institution_id=p.institution_id AND r.proposal_id=p.id AND r.is_active
@@ -185,37 +238,53 @@ func (s service) listReports(c *gin.Context, a actor) {
 	}
 	defer rows.Close()
 	type reportRow struct {
-		ProposalID          int64            `json:"proposalId"`
-		Title               string           `json:"title"`
-		Kind                string           `json:"kind"`
-		Revision            int              `json:"revision"`
-		Data                json.RawMessage  `json:"data"`
-		Source              json.RawMessage  `json:"source"`
-		OutputTargets       []outputInput    `json:"outputTargets"`
-		OutputProgress      []outputProgress `json:"outputProgress"`
-		AllowProgressReport bool             `json:"allowProgressReport"`
-		AllowFinalReport    bool             `json:"allowFinalReport"`
-		ProgressUploaded    bool             `json:"progressUploaded"`
-		Owner               string           `json:"owner"`
-		Scheme              string           `json:"scheme"`
-		Year                int              `json:"year"`
-		Team                []string         `json:"team"`
-		MethodDiagram       bool             `json:"methodDiagram"`
-		Poster              bool             `json:"poster"`
+		ProposalID          int64             `json:"proposalId"`
+		Title               string            `json:"title"`
+		Kind                string            `json:"kind"`
+		Revision            int               `json:"revision"`
+		Data                json.RawMessage   `json:"data"`
+		Source              json.RawMessage   `json:"source"`
+		OutputTargets       []outputInput     `json:"outputTargets"`
+		OutputProgress      []outputProgress  `json:"outputProgress"`
+		AllowProgressReport bool              `json:"allowProgressReport"`
+		AllowFinalReport    bool              `json:"allowFinalReport"`
+		ProgressUploaded    bool              `json:"progressUploaded"`
+		Owner               string            `json:"owner"`
+		OwnerNuptk          string            `json:"ownerNuptk"`
+		OwnerStudyProgram   string            `json:"ownerStudyProgram"`
+		OwnerFaculty        string            `json:"ownerFaculty"`
+		OwnerPhone          string            `json:"ownerPhone"`
+		OwnerEmail          string            `json:"ownerEmail"`
+		Officials           proposalOfficials `json:"officials"`
+		Scheme              string            `json:"scheme"`
+		Year                int               `json:"year"`
+		ProposalYear        int               `json:"proposalYear"`
+		Budget              string            `json:"budget"`
+		Costs               json.RawMessage   `json:"costs"`
+		Team                []string          `json:"team"`
+		TeamDetails         []lecturerDetail  `json:"teamDetails"`
+		MethodDiagram       bool              `json:"methodDiagram"`
+		Poster              bool              `json:"poster"`
 	}
 	items := []reportRow{}
 	for rows.Next() {
 		var item reportRow
-		var data, source, progress, targets, team []byte
-		if err := rows.Scan(&item.ProposalID, &item.Title, &item.Kind, &item.Revision, &data, &progress, &targets, &source, &item.AllowProgressReport, &item.AllowFinalReport, &item.ProgressUploaded, &item.Owner, &item.Scheme, &item.Year, &team, &item.MethodDiagram, &item.Poster); err != nil {
+		var data, source, progress, targets, team, teamDetails, costs []byte
+		var ownerSPID, ownerFacID int64
+		if err := rows.Scan(&item.ProposalID, &item.Title, &item.Kind, &item.Revision, &data, &progress, &targets, &source,
+			&item.AllowProgressReport, &item.AllowFinalReport, &item.ProgressUploaded,
+			&item.Owner, &item.OwnerNuptk, &item.OwnerStudyProgram, &item.OwnerFaculty, &item.OwnerPhone, &item.OwnerEmail,
+			&ownerSPID, &ownerFacID, &item.Scheme, &item.Year, &item.ProposalYear,
+			&item.Budget, &costs, &team, &teamDetails, &item.MethodDiagram, &item.Poster); err != nil {
 			c.Status(503)
 			return
 		}
-		if json.Unmarshal(targets, &item.OutputTargets) != nil || json.Unmarshal(progress, &item.OutputProgress) != nil || json.Unmarshal(team, &item.Team) != nil {
+		if json.Unmarshal(targets, &item.OutputTargets) != nil || json.Unmarshal(progress, &item.OutputProgress) != nil || json.Unmarshal(team, &item.Team) != nil || json.Unmarshal(teamDetails, &item.TeamDetails) != nil {
 			c.Status(503)
 			return
 		}
-		item.Data, item.Source = json.RawMessage(data), json.RawMessage(source)
+		item.Officials = loadProposalOfficials(ctx, s.db, a.tenant, ownerSPID, ownerFacID)
+		item.Data, item.Source, item.Costs = json.RawMessage(data), json.RawMessage(source), json.RawMessage(costs)
 		items = append(items, item)
 	}
 	if rows.Err() != nil {

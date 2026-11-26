@@ -3,6 +3,11 @@
   margin: 30mm 20mm 30mm 40mm;
 }
 
+@page simp2m-progress {
+  size: A4;
+  margin: 30mm 20mm 30mm 40mm;
+}
+
 .proposal-print-document .border-black {
   border-color: #000000 !important;
 }
@@ -56,6 +61,17 @@
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
     overflow-wrap: anywhere;
+  }
+  .proposal-print-document.progress-print-document {
+    page: simp2m-progress;
+    padding-right: 2mm !important;
+    box-sizing: border-box !important;
+  }
+  .proposal-print-document.progress-print-document .border-black,
+  .proposal-print-document.progress-print-document table.border-black th,
+  .proposal-print-document.progress-print-document table.border-black td {
+    border-color: #000000 !important;
+    border-style: solid !important;
   }
   .proposal-print-document .proposal-print-page-start {
     break-before: page;

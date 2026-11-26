@@ -281,9 +281,12 @@ export function AccessPanel({ section }: { section: "access" | "institutions" | 
               <Input label="Nama institusi baru" name="name" required maxLength={200} />
               <Button data-action-tone="positive" disabled={pending}><Plus size={15} aria-hidden="true" /> Tambah institusi</Button>
             </form>
-            {id > 0 && <form key={id} method="post" onSubmit={event => void submit(event, data => request(endpoint, { name: data.get("name"), active: data.has("active") }, "PUT"))} className="workspace-fields mt-3 flex flex-wrap items-end gap-2 border-t border-border pt-3">
+            {id > 0 && <form key={id} method="post" onSubmit={event => void submit(event, data => request(endpoint, { name: data.get("name"), active: data.has("active") }, "PUT"))} className="workspace-fields mt-3 flex flex-wrap items-end gap-2.5 border-t border-border pt-3">
               <Input label="Nama institusi terpilih" name="name" required maxLength={200} defaultValue={institutions.find(item => item.id === id)?.name} />
-              <label className="self-center text-sm"><input type="checkbox" name="active" defaultChecked={selected?.active} /> Institusi aktif</label>
+              <label className="inline-flex h-9 cursor-pointer select-none items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 text-sm font-medium">
+                <input type="checkbox" name="active" defaultChecked={selected?.active} className="h-4 w-4 shrink-0 cursor-pointer" />
+                <span>Institusi aktif</span>
+              </label>
               <Button data-action-tone="positive" variant="outline" disabled={pending}><Save size={15} aria-hidden="true" /> Simpan institusi</Button>
               {selected?.active && <Button data-action-tone="danger" type="button" variant="outline" className="text-destructive" disabled={pending} onClick={() => void removeEntry(endpoint, `Hapus institusi ${selected.name}?`, "Institusi akan dinonaktifkan. Keanggotaan dan riwayatnya tetap tersimpan.")}>
                 <Trash2 size={15} aria-hidden="true" /> Hapus institusi
@@ -430,7 +433,10 @@ export function AccessPanel({ section }: { section: "access" | "institutions" | 
               {system && [undefined, ...workspace.roles.filter(role => showInactive || role.active)].map(role => (
                 <form key={role?.id ?? "new"} method="post" onSubmit={event => void submit(event, data => request(endpoint + "/roles" + (role ? `/${role.id}` : ""), { name: data.get("name"), active: data.has("active"), permissions: data.getAll("permission") }, role ? "PUT" : "POST"), !role)} className="flex flex-wrap items-end gap-3 border-b border-border pb-4 text-sm">
                   <Input id={`role-${role?.id ?? "new"}`} label={role ? "Nama role" : "Nama role baru"} name="name" defaultValue={role?.name} required maxLength={64} />
-                  <label><input type="checkbox" name="active" defaultChecked={role?.active ?? true} /> Aktif</label>
+                  <label className="inline-flex h-9 cursor-pointer select-none items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 text-sm font-medium">
+                    <input type="checkbox" name="active" defaultChecked={role?.active ?? true} className="h-4 w-4 shrink-0 cursor-pointer" />
+                    <span>Aktif</span>
+                  </label>
                   {workspace.permissions.map(permission => <label key={permission} className="flex items-center gap-1.5"><input type="checkbox" name="permission" value={permission} defaultChecked={role?.permissions.includes(permission)} /> {menuPermissions[permission] ?? permission}</label>)}
                   <Button data-action-tone="positive" disabled={pending}>{role ? <Save size={15} aria-hidden="true" /> : <Plus size={15} aria-hidden="true" />} {role ? "Simpan role" : "Tambah role"}</Button>
                   {role?.active && <Button data-action-tone="danger" type="button" variant="outline" className="text-destructive" disabled={pending} onClick={() => void removeEntry(`${endpoint}/roles/${role.id}`, `Hapus role ${role.name}?`, "Role dan izin yang diberikan lewat role ini akan dinonaktifkan. Riwayat penetapannya tetap tersimpan.")}>

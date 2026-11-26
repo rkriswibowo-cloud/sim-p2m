@@ -2,6 +2,7 @@ import { BrandCredit } from "@/components/layout/footer";
 import { cookies } from "next/headers";
 import { getWorkspaceSession } from "./session";
 import { WorkspaceShell } from "./workspace-shell";
+import { PALETTES, type Palette } from "./workspace-palettes";
 import { WorkspacePreferences } from "./workspace-preferences";
 import "./workspace.css";
 
@@ -10,27 +11,34 @@ export default async function WorkspaceLayout({ children }: { children: React.Re
   const preferences = await cookies();
   const theme = preferences.get("simp2m_theme")?.value;
   const iconColor = preferences.get("simp2m_icon_color")?.value;
+  const paletteCookie = preferences.get("simp2m_palette")?.value as Palette | undefined;
+  const validPalette = PALETTES.some(p => p.id === paletteCookie) ? paletteCookie : "slate";
   const date = new Intl.DateTimeFormat("id-ID", { dateStyle: "full", timeZone: "Asia/Jakarta" }).format(new Date());
   return (
-    <WorkspacePreferences initialTheme={theme === "light" || theme === "system" ? theme : "dark"} initialCollapsed={preferences.get("simp2m_sidebar")?.value === "collapsed"} initialIconColor={iconColor ? `#${iconColor}` : undefined}>
-    <WorkspaceShell
-      name={user?.name}
-      institution={user?.institution}
-      system={user?.role === "superadmin"}
-      canAccess={institutions.some(item => item.canRead) || user?.role === "superadmin"}
-      canAudit={institutions.some(item => item.canAudit) || user?.role === "superadmin"}
-      canMaster={user?.canMaster ?? false}
-      canGrant={user?.canGrant ?? false}
-      canResearch={user?.canResearch ?? false}
-      canCommunity={user?.canCommunity ?? false}
-      canDocuments={user?.canDocuments ?? false}
-      canReports={user?.canReports ?? false}
-      canSelection={user?.canSelection ?? false}
-      date={date}
-      footer={<BrandCredit />}
+    <WorkspacePreferences
+      initialTheme={theme === "light" || theme === "system" ? theme : "dark"}
+      initialCollapsed={preferences.get("simp2m_sidebar")?.value === "collapsed"}
+      initialIconColor={iconColor ? `#${iconColor}` : undefined}
+      initialPalette={validPalette}
     >
-      {user ? children : <p role="alert" className="rounded-xl border border-border bg-card p-5 text-destructive">Layanan akun belum dapat dihubungi. Muat ulang halaman untuk mencoba lagi.</p>}
-    </WorkspaceShell>
+      <WorkspaceShell
+        name={user?.name}
+        institution={user?.institution}
+        system={user?.role === "superadmin"}
+        canAccess={institutions.some(item => item.canRead) || user?.role === "superadmin"}
+        canAudit={institutions.some(item => item.canAudit) || user?.role === "superadmin"}
+        canMaster={user?.canMaster ?? false}
+        canGrant={user?.canGrant ?? false}
+        canResearch={user?.canResearch ?? false}
+        canCommunity={user?.canCommunity ?? false}
+        canDocuments={user?.canDocuments ?? false}
+        canReports={user?.canReports ?? false}
+        canSelection={user?.canSelection ?? false}
+        date={date}
+        footer={<BrandCredit />}
+      >
+        {user ? children : <p role="alert" className="rounded-xl border border-border bg-card p-5 text-destructive">Layanan akun belum dapat dihubungi. Muat ulang halaman untuk mencoba lagi.</p>}
+      </WorkspaceShell>
     </WorkspacePreferences>
   );
 }
