@@ -29,7 +29,7 @@ export default async function WorkspaceLayout({ children }: { children: React.Re
         canAudit={institutions.some(item => item.canAudit) || user?.role === "superadmin"}
         canMaster={user?.canMaster ?? false}
         canGrant={user?.canGrant ?? false}
-        canResearch={user?.canResearch ?? false}
+        canResearch={Boolean(user?.canResearch || institutions.some(item => item.active && item.canVerify))}
         canCommunity={user?.canCommunity ?? false}
         canDocuments={user?.canDocuments ?? false}
         canReports={user?.canReports ?? false}

@@ -29,6 +29,31 @@
   border-bottom-width: 1.5px;
 }
 
+.student-letter-letterhead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0 2% 0.25rem;
+  border-bottom: 1.5px solid #000;
+  color: #145326;
+  break-inside: avoid;
+  break-after: avoid;
+}
+
+.student-letter-letterhead img {
+  width: 38%;
+  max-width: 16rem;
+  height: auto;
+}
+
+.student-letter-letterhead address {
+  font-size: 8pt;
+  font-style: normal;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
 @media print {
   body:has(> .proposal-print-overlay) > :not(.proposal-print-overlay) {
     display: none !important;

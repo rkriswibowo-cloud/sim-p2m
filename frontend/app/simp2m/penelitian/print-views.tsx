@@ -20,6 +20,7 @@ type PrintableProposal = {
   id: number;
   title: string;
   scheme: string;
+  fundingSource?: string;
   period: string;
   owner: string;
   ownerNuptk?: string;
@@ -94,7 +95,18 @@ export function PrintPreviewModal({
   const romanIdx = ["I", "II", "III", "IV", "V"];
   const lookupLecturer = (id: unknown) => options.lecturers.find((l) => l.id === Number(id))?.name ?? `Dosen #${id}`;
   const lookupLecturerDetail = (id: unknown) => proposal.teamDetails?.find((l) => l.id === Number(id));
-  const lookupStudent = (id: unknown) => options.students.find((s) => s.id === Number(id))?.name ?? `Mahasiswa #${id}`;
+
+  const studentLetterRows = mode === "student-letter" ? students.filter(student => Number(student.id) > 0).map(student => {
+    const label = options.students.find(choice => choice.id === Number(student.id))?.name ?? "";
+    // Research student choices use the display label "name · NIM".
+    const separator = label.lastIndexOf(" · ");
+    return {
+      name: separator >= 0 ? label.slice(0, separator) : label || `Mahasiswa #${student.id}`,
+      nim: separator >= 0 ? label.slice(separator + 3) : "",
+      activity: String(student.activity || ""),
+      thesis: String(student.thesis || ""),
+    };
+  }) : [];
 
   function renderHtmlBlock(raw?: string) {
     const clean = sanitizeClientHtml(raw ?? "");
@@ -134,7 +146,19 @@ export function PrintPreviewModal({
         >
           {mode === "student-letter" ? (
             <div className="space-y-4">
-              <div className="border-b-2 border-black pb-2 text-center">
+              <header className="student-letter-letterhead">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/images/logo-uam.png" width={182} height={74} alt="Universitas Anwar Medika — Humanity Beyond Excellence" />
+                <address>
+                  <strong>UNIVERSITAS ANWAR MEDIKA</strong><br />
+                  Jalan Raya By Pass Krian KM. 33<br />
+                  Balongbendo Sidoarjo 61263<br />
+                  Telp. (031) 99892096 - 082233362014<br />
+                  Laman: www.uam.ac.id<br />
+                  Surel: univ.anwarmedika@uam.ac.id
+                </address>
+              </header>
+              <div className="text-center">
                 <h1 className="text-base font-bold uppercase">SURAT PERNYATAAN KETERLIBATAN MAHASISWA</h1>
                 <p className="text-sm font-bold uppercase">DALAM PENELITIAN DOSEN</p>
               </div>
@@ -147,62 +171,47 @@ export function PrintPreviewModal({
                   <tr><td className="py-1">Skema / Periode</td><td>:</td><td>{proposal.scheme} · {proposal.period}</td></tr>
                 </tbody>
               </table>
-              <p>Menyatakan bahwa mahasiswa berikut dilibatkan dalam pelaksanaan penelitian:</p>
-              <table className="w-full border-collapse border border-black text-xs">
-                <thead>
-                  <tr className="bg-gray-100">
-                    <th className="border border-black px-2 py-1.5 text-center w-10">No</th>
-                    <th className="border border-black px-2 py-1.5 text-left">Nama &amp; NIM Mahasiswa</th>
-                    <th className="border border-black px-2 py-1.5 text-left">Bentuk Keterlibatan</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {students.length === 0 ? (
-                    <tr><td colSpan={3} className="border border-black px-2 py-2 text-center">Belum ada mahasiswa ditambahkan.</td></tr>
-                  ) : students.map((st, idx) => (
-                    <tr key={idx}>
-                      <td className="border border-black px-2 py-1.5 text-center">{idx + 1}</td>
-                      <td className="border border-black px-2 py-1.5">{lookupStudent(st.id)}</td>
-                      <td className="border border-black px-2 py-1.5">{String(st.activity || "-")}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <p className="pt-2 font-semibold">Rencana Tugas Akhir dan Tanda Tangan Mahasiswa:</p>
-              <table className="w-full border-collapse border border-black text-xs">
-                <thead>
-                  <tr className="bg-gray-100">
-                    <th className="border border-black px-2 py-1.5 text-center w-10">No</th>
-                    <th className="border border-black px-2 py-1.5 text-left">Nama &amp; NIM</th>
-                    <th className="border border-black px-2 py-1.5 text-left">Judul Tugas Akhir</th>
-                    <th className="border border-black px-2 py-1.5 text-center w-32">Tanda Tangan</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {students.length === 0 ? (
-                    <tr><td colSpan={4} className="border border-black px-2 py-2 text-center">-</td></tr>
-                  ) : students.map((st, idx) => (
-                    <tr key={idx}>
-                      <td className="border border-black px-2 py-2 text-center">{idx + 1}</td>
-                      <td className="border border-black px-2 py-2">{lookupStudent(st.id)}</td>
-                      <td className="border border-black px-2 py-2">{String(st.thesis || "-")}</td>
-                      <td className="border border-black px-2 py-4 text-center"></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="grid grid-cols-2 gap-8 pt-8 text-center text-xs">
+              <div className="space-y-3 text-sm">
                 <div>
-                  <p>Mengetahui,</p>
-                  <p className="font-semibold">Pejabat LPPM {institutionName}</p>
-                  <div className="h-16" />
-                  <p>(........................................)</p>
+                  <p>Menyatakan dengan sesungguhnya bahwa mahasiswa berikut:</p>
+                  <StudentLetterTable
+                    columns={["NAMA", "NIM", "Bentuk Keterlibatan"]}
+                    rows={studentLetterRows.map(student => [student.name, student.nim, student.activity])}
+                  />
                 </div>
                 <div>
-                  <p>{institutionName}, {new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}</p>
-                  <p className="font-semibold">Ketua Peneliti,</p>
-                  <div className="h-16" />
-                  <p className="font-semibold underline">{proposal.owner}</p>
+                  <p>
+                    Benar-benar terlibat dalam penelitian saya yang berjudul <strong>“{proposal.title || "Judul Penelitian"}”</strong>
+                    {" "}dengan skema penelitian <strong>“{proposal.scheme || "Skema Penelitian"}”</strong>,
+                    sumber dana dari <strong>“{proposal.fundingSource || "........"}”</strong>,
+                    Tahun Anggaran “{proposal.proposalYear || "...."}”.
+                  </p>
+                  <p>Berikut adalah daftar judul tugas akhir mahasiswa yang terlibat pada penelitian.</p>
+                </div>
+                <StudentLetterTable
+                  columns={["NAMA", "NIM", "Judul Tugas Akhir", "Tanda Tangan"]}
+                  rows={studentLetterRows.map(student => [student.name, student.nim, student.thesis, ""])}
+                />
+                <p>Demikian surat pernyataan ini saya buat dengan sebenar-benarnya.</p>
+              </div>
+              <div className="proposal-print-signatures pt-8 text-xs">
+                <div className="grid grid-cols-[3fr_2fr] gap-x-4">
+                  <div className="pt-[1lh]">
+                    <p>Mengetahui</p>
+                    <p>Plt. Kepala LPPM UAM,</p>
+                  </div>
+                  <div>
+                    <p>Sidoarjo, ............ {proposal.proposalYear || new Date().getFullYear()}</p>
+                    <p>Ketua Peneliti</p>
+                  </div>
+                  <div className="mt-16">
+                    <p className="font-bold underline">{proposal.officials?.ketuaLppm?.name || "Rosi Rijal Sani, S.IP., M.IP."}</p>
+                    <p>NUPTK. {proposal.officials?.ketuaLppm?.name ? proposal.officials.ketuaLppm.nuptk : "2962770671130312"}</p>
+                  </div>
+                  <div className="mt-16">
+                    <p className="font-bold underline">{proposal.owner || "Nama dan Gelar"}</p>
+                    <p>NUPTK. {proposal.ownerNuptk}</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -778,6 +787,31 @@ export function PrintPreviewModal({
         </div>
       </div>
     </div>, document.body
+  );
+}
+
+function StudentLetterTable({ columns, rows }: { columns: string[]; rows: string[][] }) {
+  return (
+    <table className="w-full table-fixed border-collapse border border-black text-xs">
+      <thead>
+        <tr>
+          <th scope="col" className="w-8 border border-black px-1 py-0.5 font-normal">No</th>
+          {columns.map(column => (
+            <th key={column} scope="col" className="border border-black px-1 py-0.5 font-normal">{column}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row, index) => (
+          <tr key={index} className="h-7">
+            <td className="border border-black px-1 text-center">{index + 1}.</td>
+            {columns.map((column, cellIndex) => (
+              <td key={column} className="border border-black px-1 py-0.5 wrap-anywhere">{row[cellIndex]}</td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 

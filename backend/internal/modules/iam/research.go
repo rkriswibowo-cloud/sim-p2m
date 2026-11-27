@@ -35,6 +35,7 @@ type proposal struct {
 	Revision             int             `json:"revision"`
 	Budget               string          `json:"budget"`
 	Scheme               string          `json:"scheme"`
+	FundingSource        string          `json:"fundingSource"`
 	Period               string          `json:"period"`
 	Owner                string           `json:"owner"`
 	OwnerNuptk           string           `json:"ownerNuptk"`
@@ -112,7 +113,7 @@ func loadProposalOfficials(ctx context.Context, db *sql.DB, tenant, studyProgram
 }
 
 const proposalSelectFields = `SELECT p.id,p.grant_version_id,v.period_id,v.scheme_id,v.version_no,(v.active_lecturer OR v.manual_requirements<>''),p.research_field_id,p.title,p.status,p.revision,
- CAST(p.budget_idr AS CHAR),v.scheme_name,g.name,u.display_name,p.updated_at,p.workflow_status,p.funding_decision,CAST(p.approved_budget_idr AS CHAR),p.decision_note,`
+ CAST(p.budget_idr AS CHAR),v.scheme_name,v.source_name,g.name,u.display_name,p.updated_at,p.workflow_status,p.funding_decision,CAST(p.approved_budget_idr AS CHAR),p.decision_note,`
 const proposalSelectJoins = `,
  EXISTS(SELECT 1 FROM research_proposal_images i WHERE i.proposal_id=p.id AND i.kind='roadmap'),
  EXISTS(SELECT 1 FROM research_proposal_images i WHERE i.proposal_id=p.id AND i.kind='method'),
@@ -129,7 +130,7 @@ func readProposal(row rowScanner) (proposal, error) {
 	var item proposal
 	var payload []byte
 	var approved sql.NullString
-	err := row.Scan(&item.ID, &item.GrantVersionID, &item.PeriodID, &item.SchemeID, &item.GrantVersion, &item.RequiresVerification, &item.FieldID, &item.Title, &item.Status, &item.Revision, &item.Budget, &item.Scheme, &item.Period, &item.Owner, &item.UpdatedAt, &item.WorkflowStatus, &item.FundingDecision, &approved, &item.DecisionNote, &payload, &item.RoadmapImage, &item.MethodImage, &item.StudentLetterFile, &item.Verification)
+	err := row.Scan(&item.ID, &item.GrantVersionID, &item.PeriodID, &item.SchemeID, &item.GrantVersion, &item.RequiresVerification, &item.FieldID, &item.Title, &item.Status, &item.Revision, &item.Budget, &item.Scheme, &item.FundingSource, &item.Period, &item.Owner, &item.UpdatedAt, &item.WorkflowStatus, &item.FundingDecision, &approved, &item.DecisionNote, &payload, &item.RoadmapImage, &item.MethodImage, &item.StudentLetterFile, &item.Verification)
 	if err != nil {
 		return item, err
 	}

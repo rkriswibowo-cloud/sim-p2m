@@ -62,7 +62,7 @@ export const getWorkspaceSession = cache(async () => {
   } catch { /* Report the unavailable service from the layout. */ }
   if (response?.status === 401) redirect(login);
   const user = response?.ok ? await response.json() as Identity : undefined;
-  const institutions = user && (user.canAccess || user.canMaster || user.canGrant || user.canResearch || user.canCommunity || user.canDocuments || user.canReports)
+  const institutions = user && (user.canAccess || user.canMaster || user.canGrant || user.canResearch || user.canCommunity || user.canDocuments || user.canReports || user.canSelection)
     ? await request<{ items: InstitutionAccess[] }>("/api/v1/iam/institutions")
     : undefined;
   return { user, institutions: institutions?.items ?? [], request };

@@ -1,18 +1,21 @@
 "use client";
 
-import { Download, ExternalLink, Pencil, Save, Trash2, Upload } from "lucide-react";
+import { Check, Download, ExternalLink, Pencil, RefreshCw, Save, Trash2, Upload } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import type { FormEvent } from "react";
 import { toast } from "sonner";
+import { AdvancedTable } from "@/components/ui/advanced-table";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, Input, fieldClass } from "@/components/ui/input";
 import { confirmRemoval, workspaceToastOptions } from "../confirm-removal";
 import { api } from "./view";
 
-type Institution = { id: number; name: string };
+type Institution = { id: number; name: string; canResearch: boolean; canVerify?: boolean };
 type Proposal = { id: number; title: string; period: string };
-type Attachment = { slot: string; driveUrl: string; hasFile: boolean };
+type Attachment = { slot: string; driveUrl: string; hasFile: boolean; approved: boolean };
+type AchievementReview = Attachment & { proposalId: number; title: string; owner: string; label: string; version: string };
 type Achievements = { outputs: { key: string; kind: string; status: string; year: number }[]; attachments: Attachment[] };
 
 const documents = [
@@ -23,6 +26,8 @@ const documents = [
 
 export function ResearchAchievements({ institutions }: { institutions: Institution[] }) {
   const [tenant, setTenant] = useState(institutions[0]?.id ?? 0);
+  const institution = institutions.find(item => item.id === tenant);
+  const endpoint = `/api/v1/iam/institutions/${tenant}`;
 
   return <Card className="workspace-panel">
     <CardHeader><CardTitle>Capaian Penelitian Terkini</CardTitle></CardHeader>
@@ -33,8 +38,9 @@ export function ResearchAchievements({ institutions }: { institutions: Instituti
           {institutions.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
         </select>
       </Field>}
-      {tenant ? <ProposalAchievements key={tenant} endpoint={`/api/v1/iam/institutions/${tenant}/research`} /> :
-        <p className="text-sm text-muted-foreground">Belum ada institusi aktif dengan izin Penelitian.</p>}
+      {institution?.canResearch && <ProposalAchievements key={tenant} endpoint={`${endpoint}/research`} />}
+      {institution?.canVerify && <AchievementReviews key={tenant} endpoint={`${endpoint}/achievement-reviews`} />}
+      {!institution && <p className="text-sm text-muted-foreground">Belum ada institusi aktif dengan izin Penelitian.</p>}
     </CardContent>
   </Card>;
 }
@@ -72,46 +78,175 @@ function ProposalAchievements({ endpoint }: { endpoint: string }) {
 
 function AchievementForms({ endpoint }: { endpoint: string }) {
   const [data, setData] = useState<Achievements>();
+  const [editing, setEditing] = useState("");
+  const [refresh, setRefresh] = useState(0);
   const [error, setError] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
     void api<Achievements>(endpoint, { signal: controller.signal }).then(result => {
-      if (!controller.signal.aborted) setData(result);
+      if (!controller.signal.aborted) {
+        setData(result);
+        setError("");
+      }
     }).catch((err: Error) => {
       if (!controller.signal.aborted) setError(err.message);
     });
     return () => controller.abort();
-  }, [endpoint]);
+  }, [endpoint, refresh]);
 
-  if (error) return <p role="alert" className="text-sm text-destructive">{error}</p>;
+  if (error && !data) return <p role="alert" className="text-sm text-destructive">{error}</p>;
   if (!data) return <p role="status" className="text-sm">Memuat capaian penelitian…</p>;
 
-  function renderAttachment(slot: string, label: string, detail?: string) {
-    return <AchievementForm key={slot} endpoint={`${endpoint}/${slot}`} label={label} detail={detail}
-      initial={data?.attachments.find(item => item.slot === slot)} />;
+  const rows = [
+    ...documents.map(document => ({ ...document, category: "Dokumen Penelitian", detail: "" })),
+    ...data.outputs.map(output => ({
+      slot: output.key, label: output.kind, category: "Luaran", detail: [output.status, output.year].filter(Boolean).join(" · "),
+    })),
+  ].map(row => ({
+    ...row,
+    attachment: data.attachments.find(item => item.slot === row.slot),
+  }));
+  const selected = rows.find(row => row.slot === editing);
+
+  function updateAttachment(slot: string, attachment?: Attachment) {
+    setData(current => current && {
+      ...current,
+      attachments: [
+        ...current.attachments.filter(item => item.slot !== slot),
+        ...(attachment ? [attachment] : []),
+      ],
+    });
   }
 
   return <>
-    <section className="space-y-3" aria-label="Dokumen Penelitian">
-      <h2 className="font-semibold">Dokumen Penelitian</h2>
-      <p className="text-sm text-muted-foreground">Gunakan tautan Google Drive untuk menghemat penyimpanan. Berikan akses Drive kepada pihak yang perlu membuka dokumen.</p>
-      {documents.map(({ slot, label }) => renderAttachment(slot, label))}
-    </section>
-    <section className="space-y-3" aria-label="Unggahan Hasil Luaran yang Dijanjikan">
-      <h2 className="font-semibold">Unggahan Hasil Luaran yang Dijanjikan</h2>
-      {data.outputs.length ? data.outputs.map((output, index) =>
-        renderAttachment(output.key, `${index + 1}. ${output.kind}`, [output.status, output.year].filter(Boolean).join(" · "))) :
-        <p className="text-sm text-muted-foreground">Belum ada luaran yang dijanjikan pada usulan ini.</p>}
-    </section>
+    {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+    <AdvancedTable
+      title="Dokumen dan Luaran Penelitian"
+      searchPlaceholder="Cari dokumen atau luaran…"
+      actions={<Button type="button" variant="outline" size="sm" disabled={Boolean(editing)}
+        onClick={() => setRefresh(current => current + 1)}>
+        <RefreshCw size={15} aria-hidden="true" /> Muat ulang
+      </Button>}
+      data={rows}
+      columns={[
+        { key: "category", header: "Kategori", sortable: true },
+        { key: "label", header: "Dokumen / Luaran", sortable: true, cell: row => <>
+          <p className="font-medium">{row.label}</p>
+          {row.detail && <p className="text-xs text-muted-foreground">{row.detail}</p>}
+        </> },
+        { key: "upload", header: "Status Unggah", cell: row => <UploadStatus attachment={row.attachment} /> },
+        { key: "action", header: "Berkas", cell: row => <div className="flex flex-wrap items-center gap-2">
+          {row.attachment && <AttachmentLink attachment={row.attachment} endpoint={`${endpoint}/${row.slot}`} />}
+          <Button type="button" size="sm" variant="outline" aria-expanded={editing === row.slot}
+            onClick={() => setEditing(current => current === row.slot ? "" : row.slot)}>
+            {row.attachment ? "Kelola" : "Unggah"}
+          </Button>
+        </div> },
+        { key: "approval", header: "Konfirmasi LPPM", cell: row => <ApprovalStatus attachment={row.attachment} /> },
+      ]}
+    />
+    {selected && <AchievementForm key={selected.slot} endpoint={`${endpoint}/${selected.slot}`}
+      slot={selected.slot} label={selected.label} saved={selected.attachment}
+      onChange={attachment => updateAttachment(selected.slot, attachment)} />}
   </>;
 }
 
-function AchievementForm({ endpoint, label, detail, initial }: { endpoint: string; label: string; detail?: string; initial?: Attachment }) {
+function UploadStatus({ attachment }: { attachment?: Attachment }) {
+  return <Badge variant={attachment ? "success" : "secondary"}>{attachment ? "Sudah upload" : "Belum upload"}</Badge>;
+}
+
+function ApprovalStatus({ attachment }: { attachment?: Attachment }) {
+  if (!attachment) return <span className="text-muted-foreground">—</span>;
+  return <Badge variant={attachment.approved ? "success" : "warning"}>
+    {attachment.approved ? "Selesai" : "Menunggu konfirmasi LPPM"}
+  </Badge>;
+}
+
+function AttachmentLink({ attachment, endpoint }: { attachment: Attachment; endpoint: string }) {
+  return attachment.hasFile ?
+    <a className="text-primary underline" href={endpoint}><Download size={15} className="mr-1 inline" aria-hidden="true" />Unduh berkas</a> :
+    <a className="text-primary underline" href={attachment.driveUrl} target="_blank" rel="noreferrer"><ExternalLink size={15} className="mr-1 inline" aria-hidden="true" />Buka di Google Drive</a>;
+}
+
+function AchievementReviews({ endpoint }: { endpoint: string }) {
+  const [items, setItems] = useState<AchievementReview[]>();
+  const [refresh, setRefresh] = useState(0);
+  const [pending, setPending] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [approvalError, setApprovalError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void api<AchievementReview[]>(endpoint, { signal: controller.signal }).then(result => {
+      if (!controller.signal.aborted) {
+        setItems(result);
+        setLoadError("");
+      }
+    }).catch((err: Error) => {
+      if (!controller.signal.aborted) setLoadError(err.message);
+    });
+    return () => controller.abort();
+  }, [endpoint, refresh]);
+
+  async function approve(item: AchievementReview) {
+    const key = `${item.proposalId}/${item.slot}`;
+    setPending(key);
+    setApprovalError("");
+    try {
+      await api(`${endpoint}/${key}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ version: item.version }),
+      });
+      setItems(current => current?.map(row => row === item ? { ...row, approved: true } : row));
+      toast.success("Capaian dikonfirmasi LPPM.", workspaceToastOptions);
+    } catch (err) {
+      setApprovalError((err as Error).message);
+    } finally {
+      setRefresh(current => current + 1);
+      setPending("");
+    }
+  }
+
+  return <section className="space-y-3" aria-label="Konfirmasi LPPM">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <h2 className="font-semibold">Konfirmasi LPPM</h2>
+      <Button type="button" variant="outline" size="sm" disabled={Boolean(pending)}
+        onClick={() => { setApprovalError(""); setRefresh(current => current + 1); }}>
+        <RefreshCw size={15} aria-hidden="true" /> Muat ulang
+      </Button>
+    </div>
+    {loadError && <p role="alert" className="text-sm text-destructive">{loadError}</p>}
+    {approvalError && <p role="alert" className="text-sm text-destructive">{approvalError}</p>}
+    {items ? <AdvancedTable
+      searchPlaceholder="Cari usulan, ketua peneliti, atau dokumen…"
+      emptyMessage="Belum ada unggahan untuk dikonfirmasi."
+      data={items}
+      columns={[
+        { key: "title", header: "Usulan Penelitian", sortable: true },
+        { key: "owner", header: "Ketua Peneliti", sortable: true },
+        { key: "label", header: "Dokumen / Luaran", sortable: true },
+        { key: "upload", header: "Status Unggah", cell: item => <UploadStatus attachment={item} /> },
+        { key: "file", header: "Berkas", cell: item => <AttachmentLink attachment={item} endpoint={`${endpoint}/${item.proposalId}/${item.slot}`} /> },
+        { key: "approval", header: "Konfirmasi LPPM", cell: item => <div className="flex flex-wrap items-center gap-2">
+          <ApprovalStatus attachment={item} />
+          {!item.approved && <Button type="button" size="sm" variant="outline" disabled={Boolean(pending)}
+            onClick={() => void approve(item)}>
+            <Check size={15} aria-hidden="true" /> {pending === `${item.proposalId}/${item.slot}` ? "Memproses…" : "Setujui"}
+          </Button>}
+        </div> },
+      ]}
+    /> : !loadError && <p role="status" className="text-sm">Memuat unggahan untuk konfirmasi…</p>}
+  </section>;
+}
+
+function AchievementForm({ endpoint, slot, label, saved, onChange }: {
+  endpoint: string; slot: string; label: string; saved?: Attachment; onChange: (attachment?: Attachment) => void;
+}) {
   const id = useId();
-  const [saved, setSaved] = useState<Pick<Attachment, "driveUrl" | "hasFile"> | undefined>(initial);
-  const [mode, setMode] = useState(initial?.hasFile ? "file" : "drive");
-  const [driveUrl, setDriveUrl] = useState(initial?.driveUrl ?? "");
+  const [mode, setMode] = useState(saved?.hasFile ? "file" : "drive");
+  const [driveUrl, setDriveUrl] = useState(saved?.driveUrl ?? "");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
 
@@ -130,7 +265,7 @@ function AchievementForm({ endpoint, label, detail, initial }: { endpoint: strin
     setError("");
     try {
       await api(endpoint, { method: "PUT", body });
-      setSaved({ driveUrl: mode === "drive" ? url : "", hasFile: mode === "file" });
+      onChange({ slot, driveUrl: mode === "drive" ? url : "", hasFile: mode === "file", approved: false });
       if (mode === "file") form.reset();
       toast.success("Unggahan tersimpan.", workspaceToastOptions);
     } catch (err) {
@@ -146,7 +281,7 @@ function AchievementForm({ endpoint, label, detail, initial }: { endpoint: strin
     setError("");
     try {
       await api(endpoint, { method: "DELETE" });
-      setSaved(undefined);
+      onChange();
       setDriveUrl("");
       toast.success("Unggahan terhapus.", workspaceToastOptions);
     } catch (err) {
@@ -160,11 +295,9 @@ function AchievementForm({ endpoint, label, detail, initial }: { endpoint: strin
     <div className="flex flex-wrap items-start justify-between gap-2">
       <div>
         <h3 id={id + "-label"} className="font-medium">{label}</h3>
-        {detail && <p className="text-xs text-muted-foreground">{detail}</p>}
+        <p className="text-xs text-muted-foreground">Untuk tautan Google Drive, pastikan admin LPPM dapat membuka dokumen.</p>
       </div>
       {saved && <div className="flex items-center gap-3 text-sm">
-        {saved.hasFile ? <a className="text-primary underline" href={endpoint}><Download size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" /> Unduh berkas</a> :
-          <a className="text-primary underline" href={saved.driveUrl} target="_blank" rel="noreferrer"><ExternalLink size={15} className="mr-1 inline shrink-0 align-text-bottom" aria-hidden="true" /> Buka di Google Drive</a>}
         <Button data-action-tone="danger" type="button" size="sm" variant="outline" disabled={pending} onClick={remove}><Trash2 size={15} aria-hidden="true" /> Hapus</Button>
       </div>}
     </div>

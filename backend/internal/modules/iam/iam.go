@@ -57,6 +57,9 @@ func (s service) routes(r *gin.RouterGroup) {
 	r.PUT("/institutions/:institution/reports/:target/:kind", s.mutationWithLimit(reportsDraft, s.changeReport, 1<<20))
 	r.DELETE("/institutions/:institution/reports/:target/:kind", s.mutation(reportsDraft, s.changeReport))
 	r.GET("/institutions/:institution/research", s.scoped(researchApply, s.listProposals))
+	r.GET("/institutions/:institution/achievement-reviews", s.scoped(researchVerify, s.listAchievementReviews))
+	r.GET("/institutions/:institution/achievement-reviews/:target/:slot", s.scoped(researchVerify, s.downloadAchievementForReview))
+	r.POST("/institutions/:institution/achievement-reviews/:target/:slot", s.mutation(researchVerify, s.approveResearchAchievement))
 	r.GET("/institutions/:institution/research/options", s.scoped(researchApply, s.researchOptions))
 	r.GET("/institutions/:institution/research/invitations", s.scoped(researchApply, s.listInvitations))
 	r.GET("/institutions/:institution/research/verification", s.scoped(researchVerify, s.verificationQueue))
@@ -369,6 +372,8 @@ func (s service) change(c *gin.Context, a actor, action string, work func(contex
 		c.JSON(409, gin.H{"error": "eligibility", "message": strings.TrimPrefix(err.Error(), eligibilityBlocked.Error()+": ")})
 	case errors.Is(err, unavailableGrant):
 		c.JSON(409, gin.H{"error": "grant_unavailable", "message": "Periode sudah tidak terbuka atau versi skema telah digantikan."})
+	case errors.Is(err, staleAchievement):
+		c.JSON(409, gin.H{"message": "Unggahan sudah berubah atau sudah dikonfirmasi. Muat ulang daftar sebelum melanjutkan."})
 	case errors.Is(err, staleProposal):
 		c.JSON(409, gin.H{"error": "stale_revision", "message": "Draf berubah di sesi lain atau sudah dikirim. Muat ulang usulan sebelum melanjutkan."})
 	case errors.Is(err, quotaFull):

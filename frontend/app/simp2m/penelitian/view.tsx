@@ -29,7 +29,7 @@ type PublicReview = { id: number; totalScore: number; recommendation: string; pu
 type Proposal = {
   id: number; grantVersionId: number; fieldId: number | null; title: string; status: "draft" | "submitted";
   revision: number; budget: string; scheme: string; period: string; owner: string;
-  ownerNuptk?: string; ownerStudyProgram?: string; ownerFaculty?: string; ownerPhone?: string; ownerEmail?: string; proposalYear?: number;
+  fundingSource?: string; ownerNuptk?: string; ownerStudyProgram?: string; ownerFaculty?: string; ownerPhone?: string; ownerEmail?: string; proposalYear?: number;
   teamDetails?: { id: number; name: string; code: string; nuptk: string; studyProgram: string; phone: string; email: string }[];
   officials?: {
     kaprodi?: { name: string; nuptk: string };
@@ -601,7 +601,13 @@ export function ResearchPanel() {
       </Card>
       {printMode && proposal && <PrintPreviewModal
         mode={printMode}
-        proposal={{ ...proposal, title: draft.title, fieldId: draft.fieldId, data: draft.data }}
+        proposal={{
+          ...proposal,
+          title: draft.title,
+          fieldId: draft.fieldId,
+          data: draft.data,
+          fundingSource: proposal.fundingSource || options.versions.find(grant => grant.id === proposal.grantVersionId)?.source,
+        }}
         institutionName={institutions.find(i => i.id === tenant)?.name ?? "Universitas Anwar Medika"}
         options={options}
         imageEndpoint={`${endpoint}/${proposal.id}/images`}
