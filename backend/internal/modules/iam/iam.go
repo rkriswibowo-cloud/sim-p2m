@@ -162,6 +162,9 @@ func (s service) routes(r *gin.RouterGroup) {
 	r.DELETE("/users/:target", s.mutation("system", s.setActive))
 	r.PUT("/users/:target/superadmin", s.mutation("system", s.setSystemRole))
 	r.PUT("/users/:target/profile", s.mutation("system", s.updateProfile))
+	if !s.trial {
+		r.PUT("/users/:target/password", s.mutation("system", s.resetPassword))
+	}
 }
 
 func (s service) identify(c *gin.Context) (actor, bool) {
@@ -255,7 +258,7 @@ func (s service) mutation(permission string, next operation) gin.HandlerFunc {
 func (s service) mutationWithLimit(permission string, next operation, limit int64) gin.HandlerFunc {
 	handler := s.scoped(permission, next)
 	return func(c *gin.Context) {
-		if c.GetHeader("Origin") != s.origin || ((permission == researchApply || permission == communityDraft) && s.trial && c.Param("role") == "trial-reader") {
+		if !auth.OriginAllowed(c.GetHeader("Origin"), s.origin) || ((permission == researchApply || permission == communityDraft) && s.trial && c.Param("role") == "trial-reader") {
 			c.Status(403)
 			return
 		}
@@ -503,5 +506,36 @@ func (s service) setActive(c *gin.Context, a actor) {
 			}
 		}
 		return id, nil
+	})
+}
+
+func (s service) resetPassword(c *gin.Context, a actor) {
+	var input struct {
+		Password string `json:"password"`
+	}
+	id := target(c)
+	if id < 1 || c.ShouldBindJSON(&input) != nil || len(input.Password) < 12 || len(input.Password) > 256 {
+		c.JSON(400, gin.H{"message": "Kata sandi baru harus terdiri dari 12 hingga 256 byte."})
+		return
+	}
+	hash, err := auth.HashPassword(input.Password)
+	if err != nil {
+		c.Status(503)
+		return
+	}
+	s.change(c, a, "user.password.reset", func(ctx context.Context, tx *sql.Tx) (int64, error) {
+		result, err := tx.ExecContext(ctx, "UPDATE users SET password_hash=? WHERE id=? AND is_active", hash, id)
+		if err != nil {
+			return 0, err
+		}
+		affected, err := result.RowsAffected()
+		if err != nil {
+			return 0, err
+		}
+		if affected == 0 {
+			return 0, sql.ErrNoRows
+		}
+		_, err = tx.ExecContext(ctx, "UPDATE sessions SET revoked_at=UTC_TIMESTAMP(6) WHERE user_id=? AND revoked_at IS NULL", id)
+		return id, err
 	})
 }

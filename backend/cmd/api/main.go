@@ -47,16 +47,26 @@ func main() {
 		if origin == "" {
 			origin = "http://localhost:3000"
 		}
-		webURL, err := url.Parse(origin)
-		if err != nil || webURL.Hostname() == "" || origin != webURL.Scheme+"://"+webURL.Host {
-			log.Fatal("SIMP2M_WEB_ORIGIN must be an origin without a path")
+		hasHTTPS := false
+		for _, part := range strings.Split(origin, ",") {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			webURL, err := url.Parse(part)
+			if err != nil || webURL.Hostname() == "" || part != webURL.Scheme+"://"+webURL.Host {
+				log.Fatal("SIMP2M_WEB_ORIGIN must be an origin without a path")
+			}
+			host := webURL.Hostname()
+			loopback := host == "localhost" || host == "127.0.0.1" || host == "::1"
+			if webURL.Scheme != "https" && !(webURL.Scheme == "http" && loopback) {
+				log.Fatal("SIMP2M_WEB_ORIGIN requires HTTPS outside loopback")
+			}
+			if webURL.Scheme == "https" {
+				hasHTTPS = true
+			}
 		}
-		host := webURL.Hostname()
-		loopback := host == "localhost" || host == "127.0.0.1" || host == "::1"
-		if webURL.Scheme != "https" && !(webURL.Scheme == "http" && loopback) {
-			log.Fatal("SIMP2M_WEB_ORIGIN requires HTTPS outside loopback")
-		}
-		auth.Register(router, pool, origin, webURL.Scheme == "https")
+		auth.Register(router, pool, origin, hasHTTPS)
 		var trial *sql.DB
 		if trialDSN := os.Getenv("SIMP2M_TRIAL_DSN"); trialDSN != "" {
 			connect, cancel := context.WithTimeout(ctx, 5*time.Second)

@@ -101,10 +101,11 @@ func (s Store) Login(ctx context.Context, rawEmail, password string) (Tokens, bo
 	}
 	defer tx.Rollback()
 	var active bool
-	if err := tx.QueryRowContext(ctx, "SELECT is_active FROM users WHERE id=? FOR UPDATE", id).Scan(&active); err != nil {
+	var currentHash string
+	if err := tx.QueryRowContext(ctx, "SELECT is_active, password_hash FROM users WHERE id=? FOR UPDATE", id).Scan(&active, &currentHash); err != nil {
 		return Tokens{}, false, err
 	}
-	if !active {
+	if !active || currentHash != hash {
 		return Tokens{}, false, nil
 	}
 	tokens, err := newSession(ctx, tx, id, nil, time.Now().UTC().Add(RefreshLifetime))

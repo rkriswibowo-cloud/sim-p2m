@@ -5,11 +5,14 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
 	"image"
+	_ "image/png"
+	"log"
 	"math/big"
 	"mime"
 	"net/http"
@@ -60,7 +63,7 @@ func (s service) loadProposalDocxMeta(ctx context.Context, a actor, id int64) (d
 	}
 	meta.Proposal = prop
 
-	err = s.db.QueryRowContext(ctx, `SELECT i.name, COALESCE(rf.name,'-'), COALESCE(fs.name,'-'), g.fiscal_year, u.email
+	err = s.db.QueryRowContext(ctx, `SELECT i.name, COALESCE(rf.name,'-'), COALESCE(fs.name,'-'), g.budget_year, u.email
  FROM research_proposals p
  JOIN institutions i ON i.id=p.institution_id
  JOIN grant_scheme_versions v ON v.institution_id=p.institution_id AND v.id=p.grant_version_id
@@ -251,8 +254,13 @@ type docxDiagram struct {
 }
 
 func (d docxDiagram) drawing() string {
+	return `<w:p><w:pPr><w:jc w:val="center"/></w:pPr>` + d.drawingRun(d.Index) + `</w:p>` +
+		docxParagraph(d.Label, false, 20, "center", 150)
+}
+
+func (d docxDiagram) drawingRun(drawingID int) string {
 	name := html.EscapeString(d.Label)
-	return fmt.Sprintf(`<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:drawing>
+	return fmt.Sprintf(`<w:r><w:drawing>
  <wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">
  <wp:extent cx="%d" cy="%d"/><wp:docPr id="%d" name="%s"/>
  <a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
@@ -261,8 +269,27 @@ func (d docxDiagram) drawing() string {
  <pic:nvPicPr><pic:cNvPr id="0" name="%s"/><pic:cNvPicPr/></pic:nvPicPr>
  <pic:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rIdImage%d"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>
  <pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="%d" cy="%d"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>
- </pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`,
-		d.Width, d.Height, d.Index, name, name, d.Index, d.Width, d.Height) + docxParagraph(d.Label, false, 20, "center", 150)
+ </pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`,
+		d.Width, d.Height, drawingID, name, name, d.Index, d.Width, d.Height)
+}
+
+// These are the same PNGs used by the proposal print view in frontend/public/images.
+//
+//go:embed assets/logo-uam.png
+var proposalUAMLogo []byte
+
+//go:embed assets/logo-diktisaintek.png
+var proposalDiktisaintekLogo []byte
+
+func docxProposalLogo(index int, label string, content []byte, height int) (docxDiagram, error) {
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(content))
+	if err != nil {
+		return docxDiagram{}, fmt.Errorf("decode embedded proposal logo %s: %w", label, err)
+	}
+	return docxDiagram{
+		Index: index, Label: label, Extension: "png", Content: content,
+		Width: height * cfg.Width / cfg.Height, Height: height,
+	}, nil
 }
 
 func (s service) proposalDocxDiagrams(ctx context.Context, proposalID int64) (map[string]docxDiagram, error) {
@@ -397,6 +424,8 @@ func rabGroupIndex(category string) int {
 	}
 }
 
+var invalidDocxFilenameChars = regexp.MustCompile(`[<>:"/\\|?*[:cntrl:]]+`)
+
 var nonSlugPattern = regexp.MustCompile(`[^a-zA-Z0-9_-]+`)
 
 func safeDocxFilename(prefix string, id int64) string {
@@ -433,6 +462,7 @@ func (s service) exportProposalDocx(c *gin.Context, a actor) {
 		return
 	}
 	if err != nil {
+		log.Printf("exportProposalDocx: loadMeta err: %v", err)
 		c.Status(503)
 		return
 	}
@@ -440,14 +470,29 @@ func (s service) exportProposalDocx(c *gin.Context, a actor) {
 	d := p.Data
 	diagrams, err := s.proposalDocxDiagrams(c.Request.Context(), p.ID)
 	if err != nil {
+		log.Printf("exportProposalDocx: diagrams err: %v", err)
 		c.Status(503)
 		return
 	}
-	embedded := []docxDiagram{}
+	uam, err := docxProposalLogo(3, "Universitas Anwar Medika", proposalUAMLogo, 914400)
+	if err != nil {
+		log.Print(err)
+		c.Status(500)
+		return
+	}
+	diktisaintek, err := docxProposalLogo(4, "Diktisaintek Berdampak", proposalDiktisaintekLogo, 914400)
+	if err != nil {
+		log.Print(err)
+		c.Status(500)
+		return
+	}
+	embedded := []docxDiagram{uam, diktisaintek}
 
 	var body strings.Builder
 	// Cover
-	body.WriteString(docxParagraph("", false, 22, "center", 1200))
+	body.WriteString(`<w:p><w:pPr><w:spacing w:after="900"/><w:jc w:val="center"/></w:pPr>` +
+		uam.drawingRun(uam.Index) + `<w:r><w:t xml:space="preserve">    </w:t></w:r>` +
+		diktisaintek.drawingRun(diktisaintek.Index) + `</w:p>`)
 	body.WriteString(docxParagraph("PROPOSAL PENELITIAN", true, 32, "center", 360))
 	body.WriteString(docxParagraph(p.Title, true, 26, "center", 360))
 	ownerCover := p.Owner
@@ -616,7 +661,10 @@ func (s service) exportProposalDocx(c *gin.Context, a actor) {
 	body.WriteString(docxParagraph("9. Jurnal Ilmiah yang menjadi sasaran publikasi", true, 22, "left", 60))
 	body.WriteString(docxParagraph(d.Journal, false, 22, "left", 160))
 
-	body.WriteString(docxHeading(fmt.Sprintf("PROPOSAL PENELITIAN - %s TAHUN %d/%d", strings.ToUpper(meta.InstitutionName), meta.FiscalYear, meta.FiscalYear+1), "right", true))
+	uam.Width = uam.Width * 2 / 3
+	uam.Height = uam.Height * 2 / 3
+	body.WriteString(`<w:p><w:pPr><w:keepNext/><w:pageBreakBefore/></w:pPr>` + uam.drawingRun(5) + `</w:p>`)
+	body.WriteString(docxHeading(fmt.Sprintf("PROPOSAL PENELITIAN - %s TAHUN %d/%d", strings.ToUpper(meta.InstitutionName), meta.FiscalYear, meta.FiscalYear+1), "right", false))
 
 	var secA strings.Builder
 	secA.WriteString(docxRichParagraphs(d.Roadmap))
@@ -779,7 +827,11 @@ func (s service) exportProposalDocx(c *gin.Context, a actor) {
 		c.Status(500)
 		return
 	}
-	filename := safeDocxNameFilename("proposal", p.Owner, p.ID)
+	ownerName := strings.Trim(strings.TrimSpace(invalidDocxFilenameChars.ReplaceAllString(p.Owner, "_")), ". ")
+	filename := safeDocxFilename("proposal", p.ID)
+	if ownerName != "" {
+		filename = "proposal_" + ownerName + ".docx"
+	}
 	c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 	c.Header("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": filename}))
 	c.Header("Cache-Control", "private, no-store")

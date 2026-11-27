@@ -5,6 +5,7 @@ import (
 	"errors"
 	"mime"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -37,8 +38,21 @@ func Register(router *gin.Engine, db *sql.DB, origin string, secure bool) {
 	mutations.POST("/logout", api.logout)
 }
 
+// OriginAllowed checks whether reqOrigin matches any comma-separated allowed origin.
+func OriginAllowed(reqOrigin, allowedOrigins string) bool {
+	if reqOrigin == "" {
+		return false
+	}
+	for _, candidate := range strings.Split(allowedOrigins, ",") {
+		if strings.TrimSpace(candidate) == reqOrigin {
+			return true
+		}
+	}
+	return false
+}
+
 func (a *endpoints) sameOrigin(c *gin.Context) {
-	if c.GetHeader("Origin") != a.origin {
+	if !OriginAllowed(c.GetHeader("Origin"), a.origin) {
 		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "origin_forbidden"})
 		return
 	}

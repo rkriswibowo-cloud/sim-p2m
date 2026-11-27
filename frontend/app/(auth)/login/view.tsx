@@ -54,6 +54,9 @@ export function LoginForm({ renew }: { renew: boolean }) {
         case 401:
           setError("Email atau kata sandi salah.");
           break;
+        case 403:
+          setError("Akses ditolak: alamat origin belum terdaftar di SIMP2M_WEB_ORIGIN.");
+          break;
         case 429:
           setError("Terlalu banyak percobaan masuk. Coba lagi dalam satu menit.");
           break;

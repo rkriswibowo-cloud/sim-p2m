@@ -1,0 +1,93 @@
+services:
+  db:
+    image: mariadb:11.8
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${SIMP2M_DB_ROOT_PASSWORD:?Set SIMP2M_DB_ROOT_PASSWORD in .env.docker}
+      SIMP2M_DB_DSN: ${SIMP2M_DB_DSN:?Set SIMP2M_DB_DSN in .env.docker}
+      SIMP2M_MIGRATION_DSN: ${SIMP2M_MIGRATION_DSN:?Set SIMP2M_MIGRATION_DSN in .env.docker}
+      SIMP2M_TRIAL_DSN: ${SIMP2M_TRIAL_DSN:?Set SIMP2M_TRIAL_DSN in .env.docker}
+      SIMP2M_TRIAL_MIGRATION_DSN: ${SIMP2M_TRIAL_MIGRATION_DSN:?Set SIMP2M_TRIAL_MIGRATION_DSN in .env.docker}
+    volumes:
+      - simp2m_db_data:/var/lib/mysql
+      - ./docker/mariadb/init.sh:/docker-entrypoint-initdb.d/01-init.sh:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command:
+      - /bin/sh
+      - -c
+      - |
+        /app/migrate
+        SIMP2M_MIGRATION_DSN="$${SIMP2M_TRIAL_MIGRATION_DSN}" /app/migrate
+    environment:
+      SIMP2M_MIGRATION_DSN: ${SIMP2M_MIGRATION_DSN:?Set SIMP2M_MIGRATION_DSN in .env.docker}
+      SIMP2M_TRIAL_MIGRATION_DSN: ${SIMP2M_TRIAL_MIGRATION_DSN:?Set SIMP2M_TRIAL_MIGRATION_DSN in .env.docker}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      SIMP2M_HTTP_ADDR: 0.0.0.0:8081
+      SIMP2M_WEB_ORIGIN: ${SIMP2M_WEB_ORIGIN:-http://localhost:8095}
+      SIMP2M_DB_DSN: ${SIMP2M_DB_DSN:?Set SIMP2M_DB_DSN in .env.docker}
+      SIMP2M_TRIAL_DSN: ${SIMP2M_TRIAL_DSN:?Set SIMP2M_TRIAL_DSN in .env.docker}
+    ports:
+      - "127.0.0.1:${SIMP2M_BACKEND_PORT:-8096}:8081"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8081/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    develop:
+      watch:
+        - action: rebuild
+          path: ./backend
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        SIMP2M_API_ORIGIN: http://backend:8081
+    restart: unless-stopped
+    environment:
+      SIMP2M_API_ORIGIN: http://backend:8081
+    ports:
+      - "127.0.0.1:${SIMP2M_FRONTEND_PORT:-8095}:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:3000"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    develop:
+      watch:
+        - action: rebuild
+          path: ./frontend
+
+volumes:
+  simp2m_db_data:

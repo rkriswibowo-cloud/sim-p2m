@@ -103,6 +103,9 @@ export function ResearchPanel() {
   const selectedGrant = eligibleVersions.find(item => item.id === grant);
   const currentGrant = options.versions.find(item => item.periodId === proposal?.periodId && item.schemeId === proposal?.schemeId);
   const isRevision = proposal?.status === "submitted" && (proposal.workflowStatus === "admin_revision" || proposal.workflowStatus === "review_revision");
+  const revisionNote = isRevision && proposal?.approvals?.find(
+    entry => entry.toStatus === proposal.workflowStatus && entry.revision <= proposal.revision && entry.note.trim(),
+  )?.note;
   const writable = mode !== "trial-reader" && (proposal?.status === "draft" || isRevision);
   const scopeLocked = pending || dirty;
 
@@ -374,8 +377,8 @@ export function ResearchPanel() {
             <p className="mt-1 text-xs text-muted-foreground">
               {proposal.workflowStatus === "admin_revision" ? "Admin LPPM meminta revisi kelengkapan usulan." : "Reviewer meminta revisi substansi usulan."} Silakan perbaiki isian di bawah, simpan, lalu klik <strong>Kirim ulang revisi</strong>.
             </p>
-            {!!proposal.approvals?.length && proposal.approvals[proposal.approvals.length - 1]?.note && <p className="mt-1 text-xs font-medium">
-              Catatan terbaru: {proposal.approvals[proposal.approvals.length - 1].note}
+            {revisionNote && <p className="mt-2 whitespace-pre-wrap break-words font-medium">
+              <strong>{proposal.workflowStatus === "admin_revision" ? "Catatan Admin LPPM" : "Catatan revisi substansi"}:</strong> {revisionNote}
             </p>}
           </div>}
           {writable && currentGrant && currentGrant.id !== proposal.grantVersionId && <div className="rounded-md border border-border p-2 text-sm">
@@ -575,28 +578,31 @@ export function ResearchPanel() {
         <CardHeader className="research-proposal-list-heading"><CardTitle>Usulan saya</CardTitle></CardHeader>
         <CardContent className="space-y-2">
           {items?.length === 0 && <p className="text-sm text-muted-foreground">Belum ada usulan penelitian.</p>}
-          {items?.map(item => <div key={item.id} className="research-proposal-list-item flex flex-wrap items-center justify-between gap-2 rounded-md border p-2">
-            <div className="min-w-0"><p className="break-words text-sm font-medium">{item.title || "Draf tanpa judul"}</p>
-              <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                <span>{item.scheme} · {item.period}</span>
-                <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${item.status === "submitted" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" : "bg-amber-500/15 text-amber-800 dark:text-amber-300"}`}>
-                  {item.status === "submitted" ? `Submitted (#${item.id})` : "Draft"}
-                </span>
+          {items?.map(item => {
+            const needsRevision = item.status === "submitted" && (item.workflowStatus === "admin_revision" || item.workflowStatus === "review_revision");
+            return <div key={item.id} className="research-proposal-list-item flex flex-wrap items-center justify-between gap-2 rounded-md border p-2">
+              <div className="min-w-0"><p className="break-words text-sm font-medium">{item.title || "Draf tanpa judul"}</p>
+                <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <span>{item.scheme} · {item.period}</span>
+                  <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${item.status === "submitted" && !needsRevision ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" : "bg-amber-500/15 text-amber-800 dark:text-amber-300"}`}>
+                    {needsRevision ? "Perlu revisi" : item.status === "submitted" ? `Submitted (#${item.id})` : "Draft"}
+                  </span>
+                </div>
               </div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {item.status === "draft" && mode !== "trial-reader" && (
-                <Button data-action-tone="danger" size="sm" variant="ghost" className="text-destructive" disabled={scopeLocked} onClick={() => void run(async () => {
-                  if (!await confirmRemoval("Batalkan draf usulan?", "Draf usulan ini akan dibatalkan dan dikeluarkan dari daftar.")) return;
-                  await api(`${endpoint}/${item.id}`, json("DELETE", { revision: item.revision }));
-                  if (proposal?.id === item.id) setProposal(undefined);
-                  setRevision(previous => previous + 1);
-                  toast.success("Draf usulan dibatalkan.", workspaceToastOptions);
-                })}><Trash2 size={15} aria-hidden="true" /> Batalkan</Button>
-              )}
-              <Button data-action-tone="info" size="sm" variant="outline" disabled={scopeLocked} onClick={() => void run(async () => show(await api<Proposal>(`${endpoint}/${item.id}`)))}><Eye size={15} aria-hidden="true" /> Buka</Button>
-            </div>
-          </div>)}
+              <div className="flex flex-wrap gap-2">
+                {item.status === "draft" && mode !== "trial-reader" && (
+                  <Button data-action-tone="danger" size="sm" variant="ghost" className="text-destructive" disabled={scopeLocked} onClick={() => void run(async () => {
+                    if (!await confirmRemoval("Batalkan draf usulan?", "Draf usulan ini akan dibatalkan dan dikeluarkan dari daftar.")) return;
+                    await api(`${endpoint}/${item.id}`, json("DELETE", { revision: item.revision }));
+                    if (proposal?.id === item.id) setProposal(undefined);
+                    setRevision(previous => previous + 1);
+                    toast.success("Draf usulan dibatalkan.", workspaceToastOptions);
+                  })}><Trash2 size={15} aria-hidden="true" /> Batalkan</Button>
+                )}
+                <Button data-action-tone="info" size="sm" variant="outline" disabled={scopeLocked} onClick={() => void run(async () => show(await api<Proposal>(`${endpoint}/${item.id}`)))}><Eye size={15} aria-hidden="true" /> {needsRevision ? "Buka catatan revisi" : "Buka"}</Button>
+              </div>
+            </div>;
+          })}
         </CardContent>
       </Card>
       {printMode && proposal && <PrintPreviewModal

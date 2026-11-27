@@ -412,6 +412,20 @@ export function AccessPanel({ section }: { section: "access" | "institutions" | 
                     <Input id="profile-email" label="Email akun" name="email" type="email" defaultValue={profile.email} required maxLength={254} />
                     <Button data-action-tone="positive" variant="outline" disabled={pending}><Save size={15} aria-hidden="true" /> Simpan profil</Button>
                   </form>
+                  {mode === "production" && profile.active && <details key={profile.id} className="rounded-md border border-border p-3">
+                    <summary className="cursor-pointer text-sm font-semibold">Reset kata sandi</summary>
+                    <p className="mt-2 text-sm text-muted-foreground">Semua sesi aktif akun {profile.email} akan berakhir setelah reset.</p>
+                    <form method="post" className="mt-2 flex flex-wrap items-end gap-2" onSubmit={event =>
+                      void submit(event, async data => {
+                        const password = String(data.get("password") ?? "");
+                        if (password !== data.get("confirmation")) throw new Error("Konfirmasi kata sandi tidak cocok.");
+                        await request(`${base}/users/${profile.id}/password`, { password }, "PUT");
+                      }, true)}>
+                      <Input label="Kata sandi baru" name="password" type="password" autoComplete="new-password" required minLength={12} maxLength={256} />
+                      <Input label="Ulangi kata sandi baru" name="confirmation" type="password" autoComplete="new-password" required minLength={12} maxLength={256} />
+                      <Button data-action-tone="edit" type="submit" variant="outline" disabled={pending}>Reset kata sandi</Button>
+                    </form>
+                  </details>}
                   <div className="flex flex-wrap gap-2 border-t border-border pt-2">
                     {profile.active ? <Button data-action-tone="danger" type="button" variant="outline" size="sm" className="text-destructive" disabled={pending}
                       onClick={() => void removeEntry(`${base}/users/${profile.id}`, `Hapus akun ${profile.name}?`, "Akun akan dinonaktifkan dan sesi aktif dicabut.")}><Trash2 size={15} aria-hidden="true" /> Hapus akun</Button>
